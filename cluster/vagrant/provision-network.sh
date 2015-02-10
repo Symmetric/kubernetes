@@ -14,12 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-DOCKER_BRIDGE=kbr0
-OVS_SWITCH=obr0
-GRE_TUNNEL_BASE=gre
+DOCKER_BRIDGE=calico0
 NETWORK_CONF_PATH=/etc/sysconfig/network-scripts/
 POST_NETWORK_SCRIPT_DIR=/kubernetes-vagrant
 POST_NETWORK_SCRIPT=${POST_NETWORK_SCRIPT_DIR}/network_closure.sh
+
 
 # ensure location of POST_NETWORK_SCRIPT exists
 mkdir -p $POST_NETWORK_SCRIPT_DIR
@@ -33,44 +32,6 @@ TYPE=Bridge
 BOOTPROTO=static
 IPADDR=${MINION_CONTAINER_ADDR}
 NETMASK=${MINION_CONTAINER_NETMASK}
-STP=yes
-EOF
-
-# add the ovs bridge ifcfg file
-cat <<EOF > ${NETWORK_CONF_PATH}ifcfg-${OVS_SWITCH}
-DEVICE=${OVS_SWITCH}
-ONBOOT=yes
-DEVICETYPE=ovs
-TYPE=OVSBridge
-BOOTPROTO=static
-HOTPLUG=no
-BRIDGE=${DOCKER_BRIDGE}
-EOF
-
-# now loop through all other minions and create persistent gre tunnels
-GRE_NUM=0
-for remote_ip in "${MINION_IPS[@]}"
-do
-    if [ "${remote_ip}" == "${MINION_IP}" ]; then
-         continue
-    fi
-    ((GRE_NUM++)) || echo
-    GRE_TUNNEL=${GRE_TUNNEL_BASE}${GRE_NUM}
-    # ovs-vsctl add-port ${OVS_SWITCH} ${GRE_TUNNEL} -- set interface ${GRE_TUNNEL} type=gre options:remote_ip=${remote_ip}
-    cat <<EOF >  ${NETWORK_CONF_PATH}ifcfg-${GRE_TUNNEL}
-DEVICE=${GRE_TUNNEL}
-ONBOOT=yes
-DEVICETYPE=ovs
-TYPE=OVSTunnel
-OVS_BRIDGE=${OVS_SWITCH}
-OVS_TUNNEL_TYPE=gre
-OVS_TUNNEL_OPTIONS="options:remote_ip=${remote_ip}"
-EOF
-done
-
-# add ip route rules such that all pod traffic flows through docker bridge and consequently to the gre tunnels
-cat <<EOF > ${NETWORK_CONF_PATH}route-${DOCKER_BRIDGE}
-${CONTAINER_SUBNET} dev ${DOCKER_BRIDGE} scope link src ${MINION_CONTAINER_ADDR}
 EOF
 
 # generate the post-configure script to be called by salt as cmd.wait
@@ -80,28 +41,34 @@ cat <<EOF > ${POST_NETWORK_SCRIPT}
 set -e
 
 # Only do this operation once, otherwise, we get docker.service files output on disk, and the command line arguments get applied multiple times
-grep -q kbr0 /etc/sysconfig/docker || {
+grep -q ${DOCKER_BRIDGE} /etc/sysconfig/docker || {
   # Stop docker before making these updates
   systemctl stop docker
 
   # NAT interface fails to revive on network restart, so OR-gate to true
   systemctl restart network.service || true
 
-  # set docker bridge up, and set stp on the ovs bridge
+  # set docker bridge up
   ip link set dev ${DOCKER_BRIDGE} up
-  ovs-vsctl set Bridge ${OVS_SWITCH} stp_enable=true
 
-  # modify the docker service file such that it uses the kube docker bridge and not its own
-  #echo "OPTIONS=-b=kbr0 --iptables=false --selinux-enabled" > /etc/sysconfig/docker
-  echo "OPTIONS='-b=kbr0 --iptables=false --selinux-enabled ${DOCKER_OPTS}'" >/etc/sysconfig/docker
+  # modify the docker service file such that it uses the calico docker bridge and not its own
+  echo "OPTIONS='-b=${DOCKER_BRIDGE} --iptables=false --selinux-enabled ${DOCKER_OPTS}'" >/etc/sysconfig/docker
   systemctl daemon-reload
   systemctl restart docker.service
 
   # setup iptables masquerade rules so the pods can reach the internet
-  iptables -t nat -A POSTROUTING -s ${CONTAINER_SUBNET} ! -d ${CONTAINER_SUBNET} -j MASQUERADE
+  #iptables -t nat -A POSTROUTING -s ${CONTAINER_SUBNET} ! -d ${CONTAINER_SUBNET} -j MASQUERADE
 
   # persist please
-  iptables-save >& /etc/sysconfig/iptables
+  #iptables-save >& /etc/sysconfig/iptables
+
+  set -x
+  #modprobe ip6_tables
+  #modprobe xt_set
+
+  #docker run --name="calico" -e IP=$MINION_IP -e ETCD_IP=10.245.1.2:4001 -e BIRD_SUBNET=10.246.0.0/16 --privileged -d --net=host --restart=always paultiplady/calico-node
+  #sudo docker exec calico /bin/bash -c 'echo show protocols | birdc -s ./etc/service/bird/bird.ctl'
+  #docker run -d -p 8001:8001 -p 5001:5001 quay.io/coreos/etcd:v0.4.6 -peer-addr ${PUBLIC_IP}:8001 -addr ${PUBLIC_IP}:5001 -name etcd-node1
 }
 EOF
 
