@@ -25,6 +25,9 @@ base:
 {% else %}
     - sdn
 {% endif %}
+{% if grains.network_mode is defined and grains.network_mode == 'calico' %}
+    - calico-node
+{% endif %}
 
   'roles:kubernetes-master':
     - match: grain

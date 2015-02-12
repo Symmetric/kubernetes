@@ -47,7 +47,7 @@ EOF
 # Our minions will have a pool role to distinguish them from the master.
 cat <<EOF >/etc/salt/minion.d/grains.conf
 grains:
-  network_mode: openvswitch
+  network_mode: calico
   node_ip: '$(echo "$MINION_IP" | sed -e "s/'/''/g")'
   etcd_servers: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
   api_servers: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
@@ -58,6 +58,7 @@ grains:
     - kubernetes-pool-vagrant
   cbr-cidr: '$(echo "$CONTAINER_SUBNET" | sed -e "s/'/''/g")'
   minion_ip: '$(echo "$MINION_IP" | sed -e "s/'/''/g")'
+  container_ip: '$(echo "$MINION_CONTAINER_ADDR" | sed -e "s/'/''/g")' 
 EOF
 
 # we will run provision to update code each time we test, so we do not want to do salt install each time
