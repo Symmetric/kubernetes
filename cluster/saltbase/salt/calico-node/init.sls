@@ -19,9 +19,9 @@ calico-node-installed:
     - name: calico-node
     - image: paultiplady/calico-node
     - environment:
-      - IP: 10.245.1.3
-      - ETCD_IP: 10.245.1.2:4001
-      - BIRD_SUBNET: 10.246.0.0/16
+      - IP: {{ grains.minion_ip }}
+      - ETCD_IP: {{ grains.etcd_servers}}:4001
+      - BIRD_SUBNET: {{ grains['cbr-cidr'] }}
     - require:
       - docker: paultiplady/calico-node
 
@@ -39,16 +39,40 @@ calico0:
     - require:
       - kmod: bridge
 
+ip6_tables:
+  kmod.present
+
+xt_set:
+  kmod.present
+
+calico-iptables:
+ iptables.append:
+   - table: nat
+   - chain: POSTROUTING
+   - source: 10.246.0.0/16
+   - dest: "not 10.246.0.0/16"
+   - jump: MASQUERADE
+
 calico-node:
   docker.running:
     - image: paultiplady/calico-node
     - restart_policy:
         Name: always
     - network_mode: host
+    - privileged: True
     - require:
       - service: docker
       - network: calico0
       - docker: calico-node-installed
+      - kmod: ip6_tables
+      - kmod: xt_set
+      - iptables: calico-iptables
+
+calico-node-etcd:
+  cmd.wait:
+    - name: curl -L http://{{ grains.etcd_servers }}:4001/v2/keys/calico/nodes/{{ grains.nodename }} -XPUT -d value={{ grains.minion_ip }}
+    - watch:
+      - docker: calico-node
 
 {% endif %}
 

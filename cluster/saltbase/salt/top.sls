@@ -44,6 +44,9 @@ base:
 {% if grains['cloud'] is defined and grains['cloud'] == 'azure' %}
     - openvpn
 {% endif %}
+{% if grains.network_mode is defined and grains.network_mode == 'calico' %}
+    - calico-master
+{% endif %}
 
   'roles:kubernetes-pool-vsphere':
     - match: grain

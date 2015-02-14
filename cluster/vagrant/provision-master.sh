@@ -67,7 +67,7 @@ grains:
   node_ip: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
   master_ip: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
   publicAddressOverride: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
-  network_mode: openvswitch
+  network_mode: calico
   networkInterfaceName: eth1
   etcd_servers: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
   api_servers: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
@@ -77,6 +77,7 @@ grains:
     - kubernetes-master
   admission_control: AlwaysAdmit
   runtime_config: '$(echo "$RUNTIME_CONFIG" | sed -e "s/'/''/g")'
+  pod_ip: '$(echo "$PORTAL_NET" | sed -e "s/'/''/g")'
 EOF
 
 mkdir -p /srv/salt-overlay/pillar
