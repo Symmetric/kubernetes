@@ -35,12 +35,6 @@ grep -q ${DOCKER_BRIDGE} /etc/sysconfig/docker || {
   echo "OPTIONS='-b=${DOCKER_BRIDGE} --iptables=false --selinux-enabled ${DOCKER_OPTS}'" >/etc/sysconfig/docker
   systemctl daemon-reload
   systemctl restart docker.service
-
-  # setup iptables masquerade rules so the pods can reach the internet
-  #iptables -t nat -A POSTROUTING -s ${CONTAINER_SUBNET} ! -d ${CONTAINER_SUBNET} -j MASQUERADE
-
-  # persist please
-  #iptables-save >& /etc/sysconfig/iptables
 }
 EOF
 

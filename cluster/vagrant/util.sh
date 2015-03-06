@@ -160,20 +160,20 @@ function verify-cluster {
     done
   done
 
-  echo
-  echo "Waiting for calico to initialize on nodes"
-  for (( i=0; i<${#MINION_IPS[@]}; i++)); do
-    local machine="${MINION_IPS[$i]}"
-    echo "Waiting for ${VAGRANT_MINION_NAMES[$i]}"
-    local count="0"
-    until [[ "$count" == "1" ]]; do
-      count=$(vagrant ssh "$machine" -c "sudo docker ps | grep calico-node | wc -l") || {
-        printf "."
-        sleep 2
-        count="0"
-      }
-    done
-  done
+  #echo
+  #echo "Waiting for calico to initialize on nodes"
+  #for (( i=0; i<${#MINION_IPS[@]}; i++)); do
+  #  local machine="${VAGRANT_MINION_NAMES[$i]}"
+  #  echo "Waiting for $machine"
+  #  local count="0"
+  #  until [[ "$count" == "1" ]]; do
+  #    count=$(vagrant ssh "$machine" -c "sudo docker ps | grep calico-node | wc -l") || {
+  #      printf "."
+  #      sleep 2
+  #      count="0"
+  #    }
+  #  done
+  #done
 
   (
     echo

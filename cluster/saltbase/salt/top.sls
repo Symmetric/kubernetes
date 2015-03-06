@@ -22,11 +22,10 @@ base:
     - logrotate
 {% if grains['cloud'] is defined and grains['cloud'] == 'azure' %}
     - openvpn-client
+{% elif grains.network_mode is defined and grains.network_mode == 'calico' %}
+    - calico.node
 {% else %}
     - sdn
-{% endif %}
-{% if grains.network_mode is defined and grains.network_mode == 'calico' %}
-    - calico-node
 {% endif %}
 
   'roles:kubernetes-master':
@@ -43,9 +42,10 @@ base:
     - kube-addons
 {% if grains['cloud'] is defined and grains['cloud'] == 'azure' %}
     - openvpn
-{% endif %}
-{% if grains.network_mode is defined and grains.network_mode == 'calico' %}
-    - calico-master
+{% elif grains.network_mode is defined and grains.network_mode == 'calico' %}
+    - calico.master
+{% else %}
+    - sdn
 {% endif %}
 
   'roles:kubernetes-pool-vsphere':

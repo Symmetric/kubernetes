@@ -34,4 +34,9 @@
   {% set cluster_domain = "--cluster_domain=" + pillar['dns_domain'] %}
 {% endif %}
 
-DAEMON_ARGS="{{daemon_args}} {{etcd_servers}} {{apiservers}} {{auth_path}} {{hostname_override}} {{address}} {{config}} --allow_privileged={{pillar['allow_privileged']}} {{pillar['log_level']}} {{cluster_dns}} {{cluster_domain}}"
+{% set docker_endpoint = ""  %}
+{% if grains.network_mode == 'calico' %}
+  {% set docker_endpoint = "--docker_endpoint=tcp://127.0.0.1:2377" %}
+{% endif %}
+
+DAEMON_ARGS="{{daemon_args}} {{etcd_servers}} {{apiservers}} {{auth_path}} {{hostname_override}} {{address}} {{config}} --allow_privileged={{pillar['allow_privileged']}} {{pillar['log_level']}} {{cluster_dns}} {{cluster_domain}} {{docker_endpoint}}"

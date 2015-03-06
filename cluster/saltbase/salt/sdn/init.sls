@@ -5,5 +5,5 @@ sdn:
     - name: /kubernetes-vagrant/network_closure.sh
     - watch:
       - pkg: docker-io
-      - network: calico0
+      
 {% endif %}
