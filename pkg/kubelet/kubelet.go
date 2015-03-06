@@ -908,6 +908,10 @@ func (kl *Kubelet) createPodInfraContainer(pod *api.BoundPod) (dockertools.Docke
 		Image: kl.podInfraContainerImage,
 		Ports: ports,
 	}
+	if pod.PodSpec.IP != nil {
+		glog.Infof("Got PodSpec IP %s", pod.PodSpec.IP)
+		container.Env = []EnvVar{EnvVar{"CALICO_IP", pod.PodSpec.IP}}
+	}
 	ref, err := containerRef(pod, container)
 	if err != nil {
 		glog.Errorf("Couldn't make a ref to pod %v, container %v: '%v'", pod.Name, container.Name, err)
