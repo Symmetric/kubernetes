@@ -207,6 +207,7 @@ func init() {
 				return err
 			}
 			out.Host = in.Host
+			out.PodIP = in.PodIP
 			return nil
 		},
 		func(in *PodState, out *newer.PodSpec, s conversion.Scope) error {
@@ -214,6 +215,7 @@ func init() {
 				return err
 			}
 			out.Host = in.Host
+			out.PodIP = in.PodIP
 			return nil
 		},
 
@@ -456,6 +458,7 @@ func init() {
 				return err
 			}
 			out.DNSPolicy = DNSPolicy(in.DNSPolicy)
+			out.PodIP = in.PodIP
 			out.Version = "v1beta2"
 			return nil
 		},
@@ -470,6 +473,7 @@ func init() {
 				return err
 			}
 			out.DNSPolicy = newer.DNSPolicy(in.DNSPolicy)
+			out.PodIP = in.PodIP
 			return nil
 		},
 

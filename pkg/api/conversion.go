@@ -119,6 +119,7 @@ func init() {
 				return err
 			}
 			out.DNSPolicy = in.DNSPolicy
+			out.PodIP = in.PodIP
 			out.Version = "v1beta2"
 			return nil
 		},
@@ -133,6 +134,7 @@ func init() {
 				return err
 			}
 			out.DNSPolicy = in.DNSPolicy
+			out.PodIP = in.PodIP
 			return nil
 		},
 	)

@@ -492,6 +492,7 @@ type PodSpec struct {
 	// the the scheduler simply schedules this pod onto that host, assuming that it fits
 	// other requirements.
 	Host string `json:"host,omitempty" description:"host requested for this pod"`
+	PodIP string `json:"podIP,omitempty"`
 }
 
 // PodStatus represents information about the status of a pod. Status may trail the actual

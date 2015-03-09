@@ -63,6 +63,7 @@ type ContainerManifest struct {
 	RestartPolicy RestartPolicy `json:"restartPolicy,omitempty" description:"restart policy for all containers within the pod; one of RestartPolicyAlways, RestartPolicyOnFailure, RestartPolicyNever"`
 	// Optional: Set DNS policy.  Defaults to "ClusterFirst"
 	DNSPolicy DNSPolicy `json:"dnsPolicy,omitempty" description:"DNS policy for containers within the pod; one of 'ClusterFirst' or 'Default'"`
+	PodIP string `json:"podIP,omitempty"`
 }
 
 // ContainerManifestList is used to communicate container manifests to kubelet.
@@ -877,6 +878,7 @@ type PodSpec struct {
 	// the the scheduler simply schedules this pod onto that host, assuming that it fits
 	// resource requirements.
 	Host string `json:"host,omitempty" description:"host requested for this pod"`
+	PodIP string `json:"podIP,omitempty"`
 }
 
 // BoundPod is a collection of containers that should be run on a host. A BoundPod

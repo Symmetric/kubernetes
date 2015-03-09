@@ -493,7 +493,7 @@ type PodSpec struct {
 	Host string `json:"host,omitempty"`
 
 	// IP is a request to use a specific IP address for the pod.
-	IP string `json:"IP,omitempty"`
+	PodIP string `json:"podIP,omitempty"`
 }
 
 // PodStatus represents information about the status of a pod. Status may trail the actual
@@ -1103,6 +1103,7 @@ type ContainerManifest struct {
 	RestartPolicy RestartPolicy `json:"restartPolicy,omitempty"`
 	// Optional: Set DNS policy.  Defaults to "ClusterFirst"
 	DNSPolicy DNSPolicy `json:"dnsPolicy"`
+	PodIP string `json:"podIP,omitempty"`
 }
 
 // ContainerManifestList is used to communicate container manifests to kubelet.
