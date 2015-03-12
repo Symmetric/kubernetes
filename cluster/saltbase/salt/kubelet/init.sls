@@ -58,8 +58,10 @@ kubelet:
     - gid_from_name: True
     - shell: /sbin/nologin
     - home: /var/lib/kubelet
+{% if grains['os_family'] != 'RedHat' %}    
     - groups:
       - docker
+{% endif %}      
     - require:
       - group: kubelet
   service.running:
@@ -70,4 +72,6 @@ kubelet:
       - file: /etc/init.d/kubelet
 {% endif %}
       - file: /var/lib/kubelet/kubernetes_auth
-
+{% if pillar.get('enable_node_monitoring', '').lower() == 'true' %}
+      - file: /etc/kubernetes/manifests/cadvisor.manifest
+{% endif %}

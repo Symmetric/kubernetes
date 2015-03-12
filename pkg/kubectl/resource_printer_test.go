@@ -452,10 +452,11 @@ func TestPrinters(t *testing.T) {
 		"pod":             &api.Pod{ObjectMeta: om("pod")},
 		"emptyPodList":    &api.PodList{},
 		"nonEmptyPodList": &api.PodList{Items: []api.Pod{{}}},
+		"endpoints":       &api.Endpoints{Endpoints: []api.Endpoint{{IP: "127.0.0.1"}, {IP: "localhost", Port: 8080}}},
 	}
 	// map of printer name to set of objects it should fail on.
 	expectedErrors := map[string]util.StringSet{
-		"template2": util.NewStringSet("pod", "emptyPodList"),
+		"template2": util.NewStringSet("pod", "emptyPodList", "endpoints"),
 	}
 
 	for pName, p := range printers {
@@ -479,19 +480,25 @@ func TestPrintEventsResultSorted(t *testing.T) {
 	obj := api.EventList{
 		Items: []api.Event{
 			{
-				Source:    api.EventSource{Component: "kubelet"},
-				Message:   "Item 1",
-				Timestamp: util.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
+				Source:         api.EventSource{Component: "kubelet"},
+				Message:        "Item 1",
+				FirstTimestamp: util.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
+				LastTimestamp:  util.NewTime(time.Date(2014, time.January, 15, 0, 0, 0, 0, time.UTC)),
+				Count:          1,
 			},
 			{
-				Source:    api.EventSource{Component: "scheduler"},
-				Message:   "Item 2",
-				Timestamp: util.NewTime(time.Date(1987, time.June, 17, 0, 0, 0, 0, time.UTC)),
+				Source:         api.EventSource{Component: "scheduler"},
+				Message:        "Item 2",
+				FirstTimestamp: util.NewTime(time.Date(1987, time.June, 17, 0, 0, 0, 0, time.UTC)),
+				LastTimestamp:  util.NewTime(time.Date(1987, time.June, 17, 0, 0, 0, 0, time.UTC)),
+				Count:          1,
 			},
 			{
-				Source:    api.EventSource{Component: "kubelet"},
-				Message:   "Item 3",
-				Timestamp: util.NewTime(time.Date(2002, time.December, 25, 0, 0, 0, 0, time.UTC)),
+				Source:         api.EventSource{Component: "kubelet"},
+				Message:        "Item 3",
+				FirstTimestamp: util.NewTime(time.Date(2002, time.December, 25, 0, 0, 0, 0, time.UTC)),
+				LastTimestamp:  util.NewTime(time.Date(2002, time.December, 25, 0, 0, 0, 0, time.UTC)),
+				Count:          1,
 			},
 		},
 	}
@@ -517,7 +524,7 @@ func TestPrintMinionStatus(t *testing.T) {
 		{
 			minion: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo1"},
-				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Kind: api.NodeReady, Status: api.ConditionFull}}},
+				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: api.NodeReady, Status: api.ConditionFull}}},
 			},
 			status: "Ready",
 		},
@@ -525,8 +532,8 @@ func TestPrintMinionStatus(t *testing.T) {
 			minion: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo2"},
 				Status: api.NodeStatus{Conditions: []api.NodeCondition{
-					{Kind: api.NodeReady, Status: api.ConditionFull},
-					{Kind: api.NodeReachable, Status: api.ConditionFull}}},
+					{Type: api.NodeReady, Status: api.ConditionFull},
+					{Type: api.NodeReachable, Status: api.ConditionFull}}},
 			},
 			status: "Ready,Reachable",
 		},
@@ -534,22 +541,22 @@ func TestPrintMinionStatus(t *testing.T) {
 			minion: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo3"},
 				Status: api.NodeStatus{Conditions: []api.NodeCondition{
-					{Kind: api.NodeReady, Status: api.ConditionFull},
-					{Kind: api.NodeReady, Status: api.ConditionFull}}},
+					{Type: api.NodeReady, Status: api.ConditionFull},
+					{Type: api.NodeReady, Status: api.ConditionFull}}},
 			},
 			status: "Ready",
 		},
 		{
 			minion: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo4"},
-				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Kind: api.NodeReady, Status: api.ConditionNone}}},
+				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: api.NodeReady, Status: api.ConditionNone}}},
 			},
 			status: "NotReady",
 		},
 		{
 			minion: api.Node{
 				ObjectMeta: api.ObjectMeta{Name: "foo5"},
-				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Kind: "InvalidValue", Status: api.ConditionFull}}},
+				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{Type: "InvalidValue", Status: api.ConditionFull}}},
 			},
 			status: "Unknown",
 		},
@@ -559,6 +566,26 @@ func TestPrintMinionStatus(t *testing.T) {
 				Status:     api.NodeStatus{Conditions: []api.NodeCondition{{}}},
 			},
 			status: "Unknown",
+		},
+		{
+			minion: api.Node{
+				ObjectMeta: api.ObjectMeta{Name: "foo7"},
+				Status: api.NodeStatus{Conditions: []api.NodeCondition{
+					{Type: api.NodeSchedulable, Status: api.ConditionFull},
+					{Type: api.NodeReady, Status: api.ConditionFull},
+					{Type: api.NodeReachable, Status: api.ConditionFull}}},
+			},
+			status: "Schedulable,Ready,Reachable",
+		},
+		{
+			minion: api.Node{
+				ObjectMeta: api.ObjectMeta{Name: "foo8"},
+				Status: api.NodeStatus{Conditions: []api.NodeCondition{
+					{Type: api.NodeSchedulable, Status: api.ConditionNone},
+					{Type: api.NodeReady, Status: api.ConditionNone},
+					{Type: api.NodeReachable, Status: api.ConditionFull}}},
+			},
+			status: "NotSchedulable,NotReady,Reachable",
 		},
 	}
 

@@ -22,12 +22,14 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/latest"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/probe"
 	httprobe "github.com/GoogleCloudPlatform/kubernetes/pkg/probe/http"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/runtime"
 )
 
 // ErrPodInfoNotAvailable may be returned when the requested pod info is not available.
@@ -37,11 +39,12 @@ var ErrPodInfoNotAvailable = errors.New("no pod info available")
 type KubeletClient interface {
 	KubeletHealthChecker
 	PodInfoGetter
+	NodeInfoGetter
 }
 
 // KubeletHealthchecker is an interface for healthchecking kubelets
 type KubeletHealthChecker interface {
-	HealthCheck(host string) (probe.Status, error)
+	HealthCheck(host string) (probe.Result, error)
 }
 
 // PodInfoGetter is an interface for things that can get information about a pod's containers.
@@ -52,6 +55,10 @@ type PodInfoGetter interface {
 	GetPodStatus(host, podNamespace, podID string) (api.PodStatusResult, error)
 }
 
+type NodeInfoGetter interface {
+	GetNodeInfo(host string) (api.NodeInfo, error)
+}
+
 // HTTPKubeletClient is the default implementation of PodInfoGetter and KubeletHealthchecker, accesses the kubelet over HTTP.
 type HTTPKubeletClient struct {
 	Client      *http.Client
@@ -59,41 +66,25 @@ type HTTPKubeletClient struct {
 	EnableHttps bool
 }
 
+// TODO: this structure is questionable, it should be using client.Config and overriding defaults.
 func NewKubeletClient(config *KubeletConfig) (KubeletClient, error) {
 	transport := http.DefaultTransport
-	hasCA := len(config.CAFile) > 0 || len(config.CAData) > 0
-	hasCert := len(config.CertFile) > 0 || len(config.CertData) > 0
-	if hasCert {
-		var (
-			certData, keyData, caData []byte
-			err                       error
-		)
-		if certData, err = dataFromSliceOrFile(config.CertData, config.CertFile); err != nil {
-			return nil, err
-		}
-		if keyData, err = dataFromSliceOrFile(config.KeyData, config.KeyFile); err != nil {
-			return nil, err
-		}
-		if caData, err = dataFromSliceOrFile(config.CAData, config.CAFile); err != nil {
-			return nil, err
-		}
-		if transport, err = NewClientCertTLSTransport(certData, keyData, caData); err != nil {
-			return nil, err
-		}
-	} else if hasCA {
-		var (
-			caData []byte
-			err    error
-		)
-		if caData, err = dataFromSliceOrFile(config.CAData, config.CAFile); err != nil {
-			return nil, err
-		}
-		if transport, err = NewTLSTransport(caData); err != nil {
-			return nil, err
+
+	tlsConfig, err := TLSConfigFor(&Config{
+		TLSClientConfig: config.TLSClientConfig,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if tlsConfig != nil {
+		transport = &http.Transport{
+			TLSClientConfig: tlsConfig,
 		}
 	}
 
-	c := &http.Client{Transport: transport}
+	c := &http.Client{
+		Transport: transport,
+	}
 	return &HTTPKubeletClient{
 		Client:      c,
 		Port:        config.Port,
@@ -101,57 +92,62 @@ func NewKubeletClient(config *KubeletConfig) (KubeletClient, error) {
 	}, nil
 }
 
-func (c *HTTPKubeletClient) url(host string) string {
-	scheme := "http://"
+func (c *HTTPKubeletClient) url(host, path, query string) string {
+	scheme := "http"
 	if c.EnableHttps {
-		scheme = "https://"
+		scheme = "https"
 	}
 
-	return fmt.Sprintf(
-		"%s%s",
-		scheme,
-		net.JoinHostPort(host, strconv.FormatUint(uint64(c.Port), 10)))
+	return (&url.URL{
+		Scheme:   scheme,
+		Host:     net.JoinHostPort(host, strconv.FormatUint(uint64(c.Port), 10)),
+		Path:     path,
+		RawQuery: query,
+	}).String()
 }
 
 // GetPodInfo gets information about the specified pod.
 func (c *HTTPKubeletClient) GetPodStatus(host, podNamespace, podID string) (api.PodStatusResult, error) {
-	request, err := http.NewRequest(
-		"GET",
-		fmt.Sprintf(
-			"%s/api/v1beta1/podInfo?podID=%s&podNamespace=%s",
-			c.url(host),
-			podID,
-			podNamespace),
-		nil)
 	status := api.PodStatusResult{}
+	query := url.Values{"podID": {podID}, "podNamespace": {podNamespace}}
+	response, err := c.getEntity(host, "/api/v1beta1/podInfo", query.Encode(), &status)
+	if response != nil && response.StatusCode == http.StatusNotFound {
+		return status, ErrPodInfoNotAvailable
+	}
+	return status, err
+}
+
+// GetNodeInfo gets information about the specified node.
+func (c *HTTPKubeletClient) GetNodeInfo(host string) (api.NodeInfo, error) {
+	info := api.NodeInfo{}
+	_, err := c.getEntity(host, "/api/v1beta1/nodeInfo", "", &info)
+	return info, err
+}
+
+// getEntity might return a nil response.
+func (c *HTTPKubeletClient) getEntity(host, path, query string, entity runtime.Object) (*http.Response, error) {
+	request, err := http.NewRequest("GET", c.url(host, path, query), nil)
 	if err != nil {
-		return status, err
+		return nil, err
 	}
 	response, err := c.Client.Do(request)
 	if err != nil {
-		return status, err
+		return response, err
 	}
 	defer response.Body.Close()
-	if response.StatusCode == http.StatusNotFound {
-		return status, ErrPodInfoNotAvailable
-	}
 	if response.StatusCode >= 300 || response.StatusCode < 200 {
-		return status, fmt.Errorf("kubelet %q server responded with HTTP error code %d for pod %s/%s", host, response.StatusCode, podNamespace, podID)
+		return response, fmt.Errorf("kubelet %q server responded with HTTP error code %d", host, response.StatusCode)
 	}
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return status, err
+		return response, err
 	}
-	// Check that this data can be unmarshalled
-	err = latest.Codec.DecodeInto(body, &status)
-	if err != nil {
-		return status, err
-	}
-	return status, nil
+	err = latest.Codec.DecodeInto(body, entity)
+	return response, err
 }
 
-func (c *HTTPKubeletClient) HealthCheck(host string) (probe.Status, error) {
-	return httprobe.DoHTTPProbe(fmt.Sprintf("%s/healthz", c.url(host)), c.Client)
+func (c *HTTPKubeletClient) HealthCheck(host string) (probe.Result, error) {
+	return httprobe.DoHTTPProbe(c.url(host, "/healthz", ""), c.Client)
 }
 
 // FakeKubeletClient is a fake implementation of KubeletClient which returns an error
@@ -164,6 +160,11 @@ func (c FakeKubeletClient) GetPodStatus(host, podNamespace string, podID string)
 	return api.PodStatusResult{}, errors.New("Not Implemented")
 }
 
-func (c FakeKubeletClient) HealthCheck(host string) (probe.Status, error) {
+// GetNodeInfo is a fake implementation of PodInfoGetter.GetNodeInfo
+func (c FakeKubeletClient) GetNodeInfo(host string) (api.NodeInfo, error) {
+	return api.NodeInfo{}, errors.New("Not Implemented")
+}
+
+func (c FakeKubeletClient) HealthCheck(host string) (probe.Result, error) {
 	return probe.Unknown, errors.New("Not Implemented")
 }

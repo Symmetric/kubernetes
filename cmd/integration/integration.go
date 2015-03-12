@@ -19,6 +19,7 @@ limitations under the License.
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -31,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	kubeletapp "github.com/GoogleCloudPlatform/kubernetes/cmd/kubelet/app"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/errors"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/latest"
@@ -45,11 +47,11 @@ import (
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/master"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/probe"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/service"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/standalone"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/util"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/util/wait"
 	"github.com/GoogleCloudPlatform/kubernetes/plugin/pkg/admission/admit"
 	"github.com/GoogleCloudPlatform/kubernetes/plugin/pkg/scheduler"
+	_ "github.com/GoogleCloudPlatform/kubernetes/plugin/pkg/scheduler/algorithmprovider"
 	"github.com/GoogleCloudPlatform/kubernetes/plugin/pkg/scheduler/factory"
 
 	"github.com/coreos/go-etcd/etcd"
@@ -73,7 +75,7 @@ func (fakeKubeletClient) GetPodStatus(host, podNamespace, podID string) (api.Pod
 			Client: http.DefaultClient,
 			Port:   10250,
 		}
-	case "machine":
+	case "127.0.0.1":
 		c = &client.HTTPKubeletClient{
 			Client: http.DefaultClient,
 			Port:   10251,
@@ -81,10 +83,25 @@ func (fakeKubeletClient) GetPodStatus(host, podNamespace, podID string) (api.Pod
 	default:
 		glog.Fatalf("Can't get info for: '%v', '%v - %v'", host, podNamespace, podID)
 	}
-	return c.GetPodStatus("localhost", podNamespace, podID)
+	r, err := c.GetPodStatus("127.0.0.1", podNamespace, podID)
+	if err != nil {
+		return r, err
+	}
+	r.Status.PodIP = "1.2.3.4"
+	m := make(api.PodInfo)
+	for k, v := range r.Status.Info {
+		v.Ready = true
+		m[k] = v
+	}
+	r.Status.Info = m
+	return r, nil
 }
 
-func (fakeKubeletClient) HealthCheck(host string) (probe.Status, error) {
+func (fakeKubeletClient) GetNodeInfo(host string) (api.NodeInfo, error) {
+	return api.NodeInfo{}, nil
+}
+
+func (fakeKubeletClient) HealthCheck(host string) (probe.Result, error) {
 	return probe.Success, nil
 }
 
@@ -102,9 +119,9 @@ func (h *delegateHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func startComponents(manifestURL string) (apiServerURL string) {
 	// Setup
-	servers := []string{"http://localhost:4001"}
+	servers := []string{}
 	glog.Infof("Creating etcd client pointing to %v", servers)
-	machineList := []string{"localhost", "machine"}
+	machineList := []string{"localhost", "127.0.0.1"}
 
 	handler := delegateHandler{}
 	apiServer := httptest.NewServer(&handler)
@@ -151,6 +168,11 @@ func startComponents(manifestURL string) (apiServerURL string) {
 		glog.Fatalf("Nonnumeric port? %v", err)
 	}
 
+	publicAddress := net.ParseIP(host)
+	if publicAddress == nil {
+		glog.Fatalf("no public address for %s", host)
+	}
+
 	// Create a master and install handlers into mux.
 	m := master.New(&master.Config{
 		Client:            cl,
@@ -162,7 +184,9 @@ func startComponents(manifestURL string) (apiServerURL string) {
 		AdmissionControl:  admit.NewAlwaysAdmit(),
 		ReadWritePort:     portNumber,
 		ReadOnlyPort:      portNumber,
-		PublicAddress:     host,
+		PublicAddress:     publicAddress,
+		CacheTimeout:      2 * time.Second,
+		SyncPodStatus:     true,
 	})
 	handler.delegate = m.Handler
 
@@ -179,24 +203,24 @@ func startComponents(manifestURL string) (apiServerURL string) {
 
 	controllerManager := replicationControllerPkg.NewReplicationManager(cl)
 
-	// Prove that controllerManager's watch works by making it not sync until after this
-	// test is over. (Hopefully we don't take 10 minutes!)
-	controllerManager.Run(10 * time.Minute)
+	// TODO: Write an integration test for the replication controllers watch.
+	controllerManager.Run(1 * time.Second)
 
 	nodeResources := &api.NodeResources{}
-	nodeController := nodeControllerPkg.NewNodeController(nil, "", machineList, nodeResources, cl, fakeKubeletClient{})
-	nodeController.Run(10*time.Second, 10)
+
+	nodeController := nodeControllerPkg.NewNodeController(nil, "", machineList, nodeResources, cl, fakeKubeletClient{}, 10, 5*time.Minute)
+	nodeController.Run(5*time.Second, true, true)
 
 	// Kubelet (localhost)
 	testRootDir := makeTempDirOrDie("kubelet_integ_1.")
 	glog.Infof("Using %s as root dir for kubelet #1", testRootDir)
-	standalone.SimpleRunKubelet(cl, nil, &fakeDocker1, machineList[0], testRootDir, manifestURL, "127.0.0.1", 10250, api.NamespaceDefault, empty_dir.ProbeVolumePlugins())
+	kubeletapp.SimpleRunKubelet(cl, &fakeDocker1, machineList[0], testRootDir, manifestURL, "127.0.0.1", 10250, api.NamespaceDefault, empty_dir.ProbeVolumePlugins(), nil)
 	// Kubelet (machine)
 	// Create a second kubelet so that the guestbook example's two redis slaves both
 	// have a place they can schedule.
 	testRootDir = makeTempDirOrDie("kubelet_integ_2.")
 	glog.Infof("Using %s as root dir for kubelet #2", testRootDir)
-	standalone.SimpleRunKubelet(cl, nil, &fakeDocker2, machineList[1], testRootDir, "", "127.0.0.1", 10251, api.NamespaceDefault, empty_dir.ProbeVolumePlugins())
+	kubeletapp.SimpleRunKubelet(cl, &fakeDocker2, machineList[1], testRootDir, "", "127.0.0.1", 10251, api.NamespaceDefault, empty_dir.ProbeVolumePlugins(), nil)
 
 	return apiServer.URL
 }
@@ -218,10 +242,13 @@ func podsOnMinions(c *client.Client, pods api.PodList) wait.ConditionFunc {
 	return func() (bool, error) {
 		for i := range pods.Items {
 			host, id, namespace := pods.Items[i].Status.Host, pods.Items[i].Name, pods.Items[i].Namespace
+			glog.Infof("Check whether pod %s.%s exists on node %q", id, namespace, host)
 			if len(host) == 0 {
+				glog.Infof("Pod %s.%s is not bound to a host yet", id, namespace)
 				return false, nil
 			}
 			if _, err := podInfo.GetPodStatus(host, namespace, id); err != nil {
+				glog.Infof("GetPodStatus error: %v", err)
 				return false, nil
 			}
 		}
@@ -233,8 +260,10 @@ func endpointsSet(c *client.Client, serviceNamespace, serviceID string, endpoint
 	return func() (bool, error) {
 		endpoints, err := c.Endpoints(serviceNamespace).Get(serviceID)
 		if err != nil {
+			glog.Infof("Error on creating endpoints: %v", err)
 			return false, nil
 		}
+		glog.Infof("endpoints: %v", endpoints.Endpoints)
 		return len(endpoints.Endpoints) == endpointCount, nil
 	}
 }
@@ -247,7 +276,7 @@ func podExists(c *client.Client, podNamespace string, podID string) wait.Conditi
 }
 
 func runReplicationControllerTest(c *client.Client) {
-	data, err := ioutil.ReadFile("api/examples/controller.json")
+	data, err := ioutil.ReadFile("cmd/integration/controller.json")
 	if err != nil {
 		glog.Fatalf("Unexpected error: %v", err)
 	}
@@ -257,18 +286,19 @@ func runReplicationControllerTest(c *client.Client) {
 	}
 
 	glog.Infof("Creating replication controllers")
-	if _, err := c.ReplicationControllers(api.NamespaceDefault).Create(&controller); err != nil {
+	updated, err := c.ReplicationControllers("test").Create(&controller)
+	if err != nil {
 		glog.Fatalf("Unexpected error: %v", err)
 	}
 	glog.Infof("Done creating replication controllers")
 
 	// Give the controllers some time to actually create the pods
-	if err := wait.Poll(time.Second, time.Second*30, client.ControllerHasDesiredReplicas(c, &controller)); err != nil {
+	if err := wait.Poll(time.Second, time.Second*30, client.ControllerHasDesiredReplicas(c, updated)); err != nil {
 		glog.Fatalf("FAILED: pods never created %v", err)
 	}
 
 	// wait for minions to indicate they have info about the desired pods
-	pods, err := c.Pods(api.NamespaceDefault).List(labels.Set(controller.Spec.Selector).AsSelector())
+	pods, err := c.Pods("test").List(labels.Set(updated.Spec.Selector).AsSelector())
 	if err != nil {
 		glog.Fatalf("FAILED: unable to get pods to list: %v", err)
 	}
@@ -290,12 +320,15 @@ func runAPIVersionsTest(c *client.Client) {
 	glog.Infof("Version test passed")
 }
 
-func runSelfLinkTest(c *client.Client) {
+func runSelfLinkTestOnNamespace(c *client.Client, namespace string) {
 	var svc api.Service
-	err := c.Post().Resource("services").Body(
+	err := c.Post().
+		NamespaceIfScoped(namespace, len(namespace) > 0).
+		Resource("services").Body(
 		&api.Service{
 			ObjectMeta: api.ObjectMeta{
-				Name: "selflinktest",
+				Name:      "selflinktest",
+				Namespace: namespace,
 				Labels: map[string]string{
 					"name": "selflinktest",
 				},
@@ -306,24 +339,27 @@ func runSelfLinkTest(c *client.Client) {
 				Selector: map[string]string{
 					"foo": "bar",
 				},
+				Protocol:        "TCP",
+				SessionAffinity: "None",
 			},
 		},
 	).Do().Into(&svc)
 	if err != nil {
 		glog.Fatalf("Failed creating selflinktest service: %v", err)
 	}
-	err = c.Get().AbsPath(svc.SelfLink).Do().Into(&svc)
+	// TODO: this is not namespace aware
+	err = c.Get().RequestURI(svc.SelfLink).Do().Into(&svc)
 	if err != nil {
 		glog.Fatalf("Failed listing service with supplied self link '%v': %v", svc.SelfLink, err)
 	}
 
 	var svcList api.ServiceList
-	err = c.Get().Resource("services").Do().Into(&svcList)
+	err = c.Get().NamespaceIfScoped(namespace, len(namespace) > 0).Resource("services").Do().Into(&svcList)
 	if err != nil {
 		glog.Fatalf("Failed listing services: %v", err)
 	}
 
-	err = c.Get().AbsPath(svcList.SelfLink).Do().Into(&svcList)
+	err = c.Get().RequestURI(svcList.SelfLink).Do().Into(&svcList)
 	if err != nil {
 		glog.Fatalf("Failed listing services with supplied self link '%v': %v", svcList.SelfLink, err)
 	}
@@ -335,16 +371,16 @@ func runSelfLinkTest(c *client.Client) {
 			continue
 		}
 		found = true
-		err = c.Get().AbsPath(item.SelfLink).Do().Into(&svc)
+		err = c.Get().RequestURI(item.SelfLink).Do().Into(&svc)
 		if err != nil {
 			glog.Fatalf("Failed listing service with supplied self link '%v': %v", item.SelfLink, err)
 		}
 		break
 	}
 	if !found {
-		glog.Fatalf("never found selflinktest service")
+		glog.Fatalf("never found selflinktest service in namespace %s", namespace)
 	}
-	glog.Infof("Self link test passed")
+	glog.Infof("Self link test passed in namespace %s", namespace)
 
 	// TODO: Should test PUT at some point, too.
 }
@@ -368,6 +404,8 @@ func runAtomicPutTest(c *client.Client) {
 				Selector: map[string]string{
 					"foo": "bar",
 				},
+				Protocol:        "TCP",
+				SessionAffinity: "None",
 			},
 		},
 	).Do().Into(&svc)
@@ -428,6 +466,81 @@ func runAtomicPutTest(c *client.Client) {
 		glog.Fatalf("Selector PUTs were not atomic: wanted %v, got %v", testLabels, svc.Spec.Selector)
 	}
 	glog.Info("Atomic PUTs work.")
+}
+
+func runPatchTest(c *client.Client) {
+	name := "patchservice"
+	resource := "services"
+	var svc api.Service
+	err := c.Post().Resource(resource).Body(
+		&api.Service{
+			TypeMeta: api.TypeMeta{
+				APIVersion: latest.Version,
+			},
+			ObjectMeta: api.ObjectMeta{
+				Name: name,
+				Labels: map[string]string{
+					"name": name,
+				},
+			},
+			Spec: api.ServiceSpec{
+				Port: 12345,
+				// This is here because validation requires it.
+				Selector: map[string]string{
+					"foo": "bar",
+				},
+				Protocol:        "TCP",
+				SessionAffinity: "None",
+			},
+		},
+	).Do().Into(&svc)
+	if err != nil {
+		glog.Fatalf("Failed creating patchservice: %v", err)
+	}
+	if len(svc.Labels) != 1 {
+		glog.Fatalf("Original length does not equal one")
+	}
+
+	// add label
+	_, err = c.Patch().Resource(resource).Name(name).Body([]byte("{\"labels\":{\"foo\":\"bar\"}}")).Do().Get()
+	if err != nil {
+		glog.Fatalf("Failed updating patchservice: %v", err)
+	}
+	err = c.Get().Resource(resource).Name(name).Do().Into(&svc)
+	if err != nil {
+		glog.Fatalf("Failed getting patchservice: %v", err)
+	}
+	if len(svc.Labels) != 2 || svc.Labels["foo"] != "bar" {
+		glog.Fatalf("Failed updating patchservice, labels are: %v", svc.Labels)
+	}
+
+	// remove one label
+	_, err = c.Patch().Resource(resource).Name(name).Body([]byte("{\"labels\":{\"name\":null}}")).Do().Get()
+	if err != nil {
+		glog.Fatalf("Failed updating patchservice: %v", err)
+	}
+	err = c.Get().Resource(resource).Name(name).Do().Into(&svc)
+	if err != nil {
+		glog.Fatalf("Failed getting patchservice: %v", err)
+	}
+	if len(svc.Labels) != 1 || svc.Labels["foo"] != "bar" {
+		glog.Fatalf("Failed updating patchservice, labels are: %v", svc.Labels)
+	}
+
+	// remove all labels
+	_, err = c.Patch().Resource(resource).Name(name).Body([]byte("{\"labels\":null}")).Do().Get()
+	if err != nil {
+		glog.Fatalf("Failed updating patchservice: %v", err)
+	}
+	err = c.Get().Resource(resource).Name(name).Do().Into(&svc)
+	if err != nil {
+		glog.Fatalf("Failed getting patchservice: %v", err)
+	}
+	if svc.Labels != nil {
+		glog.Fatalf("Failed remove all labels from patchservice: %v", svc.Labels)
+	}
+
+	glog.Info("PATCHs work.")
 }
 
 func runMasterServiceTest(client *client.Client) {
@@ -493,7 +606,7 @@ func runMasterServiceTest(client *client.Client) {
 }
 
 func runServiceTest(client *client.Client) {
-	pod := api.Pod{
+	pod := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
 			Name: "foo",
 			Labels: map[string]string{
@@ -505,56 +618,98 @@ func runServiceTest(client *client.Client) {
 				{
 					Name:  "c1",
 					Image: "foo",
-					Ports: []api.Port{
+					Ports: []api.ContainerPort{
 						{ContainerPort: 1234},
 					},
+					ImagePullPolicy: "PullIfNotPresent",
 				},
 			},
+			RestartPolicy: api.RestartPolicy{Always: &api.RestartPolicyAlways{}},
+			DNSPolicy:     api.DNSClusterFirst,
 		},
 		Status: api.PodStatus{
 			PodIP: "1.2.3.4",
 		},
 	}
-	_, err := client.Pods(api.NamespaceDefault).Create(&pod)
+	pod, err := client.Pods(api.NamespaceDefault).Create(pod)
 	if err != nil {
 		glog.Fatalf("Failed to create pod: %v, %v", pod, err)
 	}
 	if err := wait.Poll(time.Second, time.Second*20, podExists(client, pod.Namespace, pod.Name)); err != nil {
 		glog.Fatalf("FAILED: pod never started running %v", err)
 	}
-	svc1 := api.Service{
+	svc1 := &api.Service{
 		ObjectMeta: api.ObjectMeta{Name: "service1"},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
 				"name": "thisisalonglabel",
 			},
-			Port: 8080,
+			Port:            8080,
+			Protocol:        "TCP",
+			SessionAffinity: "None",
 		},
 	}
-	_, err = client.Services(api.NamespaceDefault).Create(&svc1)
+	svc1, err = client.Services(api.NamespaceDefault).Create(svc1)
 	if err != nil {
 		glog.Fatalf("Failed to create service: %v, %v", svc1, err)
 	}
+
+	// create an identical service in the default namespace
+	svc3 := &api.Service{
+		ObjectMeta: api.ObjectMeta{Name: "service1"},
+		Spec: api.ServiceSpec{
+			Selector: map[string]string{
+				"name": "thisisalonglabel",
+			},
+			Port:            8080,
+			Protocol:        "TCP",
+			SessionAffinity: "None",
+		},
+	}
+	svc3, err = client.Services("other").Create(svc3)
+	if err != nil {
+		glog.Fatalf("Failed to create service: %v, %v", svc3, err)
+	}
+
 	if err := wait.Poll(time.Second, time.Second*20, endpointsSet(client, svc1.Namespace, svc1.Name, 1)); err != nil {
 		glog.Fatalf("FAILED: unexpected endpoints: %v", err)
 	}
 	// A second service with the same port.
-	svc2 := api.Service{
+	svc2 := &api.Service{
 		ObjectMeta: api.ObjectMeta{Name: "service2"},
 		Spec: api.ServiceSpec{
 			Selector: map[string]string{
 				"name": "thisisalonglabel",
 			},
-			Port: 8080,
+			Port:            8080,
+			Protocol:        "TCP",
+			SessionAffinity: "None",
 		},
 	}
-	_, err = client.Services(api.NamespaceDefault).Create(&svc2)
+	svc2, err = client.Services(api.NamespaceDefault).Create(svc2)
 	if err != nil {
 		glog.Fatalf("Failed to create service: %v, %v", svc2, err)
 	}
 	if err := wait.Poll(time.Second, time.Second*20, endpointsSet(client, svc2.Namespace, svc2.Name, 1)); err != nil {
 		glog.Fatalf("FAILED: unexpected endpoints: %v", err)
 	}
+
+	if ok, err := endpointsSet(client, svc3.Namespace, svc3.Name, 0)(); !ok || err != nil {
+		glog.Fatalf("FAILED: service in other namespace should have no endpoints: %v %v", ok, err)
+	}
+
+	svcList, err := client.Services(api.NamespaceAll).List(labels.Everything())
+	if err != nil {
+		glog.Fatalf("Failed to list services across namespaces: %v", err)
+	}
+	names := util.NewStringSet()
+	for _, svc := range svcList.Items {
+		names.Insert(fmt.Sprintf("%s/%s", svc.Namespace, svc.Name))
+	}
+	if !names.HasAll("default/kubernetes", "default/kubernetes-ro", "default/service1", "default/service2", "other/service1") {
+		glog.Fatalf("Unexpected service list: %#v", names)
+	}
+
 	glog.Info("Service test passed.")
 }
 
@@ -588,10 +743,14 @@ func main() {
 	testFuncs := []testFunc{
 		runReplicationControllerTest,
 		runAtomicPutTest,
+		runPatchTest,
 		runServiceTest,
 		runAPIVersionsTest,
 		runMasterServiceTest,
-		runSelfLinkTest,
+		func(c *client.Client) {
+			runSelfLinkTestOnNamespace(c, "")
+			runSelfLinkTestOnNamespace(c, "other")
+		},
 	}
 	var wg sync.WaitGroup
 	wg.Add(len(testFuncs))
@@ -624,7 +783,7 @@ func main() {
 	//              1 pod infra container + 2 pods from the URL +
 	//              1 pod infra container + 1 pod from the service test.
 	if len(createdPods) != 9 {
-		glog.Fatalf("Unexpected list of created pods:\n\n%#v\n\n%#v\n\n%#v\n\n", createdPods.List(), fakeDocker1.Created, fakeDocker2.Created)
+		glog.Fatalf("Expected 9 pods; got %v\n\nlist of created pods:\n\n%#v\n\nDocker 1 Created:\n\n%#v\n\nDocker 2 Created:\n\n%#v\n\n", len(createdPods), createdPods.List(), fakeDocker1.Created, fakeDocker2.Created)
 	}
 	glog.Infof("OK - found created pods: %#v", createdPods.List())
 }

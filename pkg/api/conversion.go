@@ -40,6 +40,10 @@ func init() {
 			return nil
 		},
 		// Convert ContainerManifest to BoundPod
+		//
+		// This function generates a dummy selfLink using the same method as the
+		// boundPod registry, in order for the Kubelet to work with well-formed
+		// boundPods during the integration test.
 		func(in *ContainerManifest, out *BoundPod, s conversion.Scope) error {
 			out.Spec.Containers = in.Containers
 			out.Spec.Volumes = in.Volumes
@@ -47,14 +51,11 @@ func init() {
 			out.Spec.DNSPolicy = in.DNSPolicy
 			out.Name = in.ID
 			out.UID = in.UUID
-			// TODO(dchen1107): Move this conversion to pkg/api/v1beta[123]/conversion.go
-			// along with fixing #1502
-			for i := range out.Spec.Containers {
-				ctr := &out.Spec.Containers[i]
-				if len(ctr.TerminationMessagePath) == 0 {
-					ctr.TerminationMessagePath = TerminationMessagePathDefault
-				}
+
+			if in.ID != "" {
+				out.SelfLink = "/api/v1beta1/boundPods/" + in.ID
 			}
+
 			return nil
 		},
 		func(in *BoundPod, out *ContainerManifest, s conversion.Scope) error {
@@ -65,12 +66,6 @@ func init() {
 			out.Version = "v1beta2"
 			out.ID = in.Name
 			out.UUID = in.UID
-			for i := range out.Containers {
-				ctr := &out.Containers[i]
-				if len(ctr.TerminationMessagePath) == 0 {
-					ctr.TerminationMessagePath = TerminationMessagePathDefault
-				}
-			}
 			return nil
 		},
 

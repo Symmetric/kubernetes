@@ -22,7 +22,7 @@ import (
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/errors"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/validation"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/apiserver"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/registry/generic"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/runtime"
@@ -44,7 +44,7 @@ func NewREST(registry generic.Registry) *REST {
 }
 
 // Create a ResourceQuota object
-func (rs *REST) Create(ctx api.Context, obj runtime.Object) (<-chan apiserver.RESTResult, error) {
+func (rs *REST) Create(ctx api.Context, obj runtime.Object) (runtime.Object, error) {
 	resourceQuota, ok := obj.(*api.ResourceQuota)
 	if !ok {
 		return nil, fmt.Errorf("invalid object type")
@@ -66,29 +66,27 @@ func (rs *REST) Create(ctx api.Context, obj runtime.Object) (<-chan apiserver.RE
 	}
 	api.FillObjectMetaSystemFields(ctx, &resourceQuota.ObjectMeta)
 
-	return apiserver.MakeAsync(func() (runtime.Object, error) {
-		err := rs.registry.Create(ctx, resourceQuota.Name, resourceQuota)
-		if err != nil {
-			return nil, err
-		}
-		return rs.registry.Get(ctx, resourceQuota.Name)
-	}), nil
+	err := rs.registry.CreateWithName(ctx, resourceQuota.Name, resourceQuota)
+	if err != nil {
+		return nil, err
+	}
+	return rs.registry.Get(ctx, resourceQuota.Name)
 }
 
 // Update updates a ResourceQuota object.
-func (rs *REST) Update(ctx api.Context, obj runtime.Object) (<-chan apiserver.RESTResult, error) {
+func (rs *REST) Update(ctx api.Context, obj runtime.Object) (runtime.Object, bool, error) {
 	resourceQuota, ok := obj.(*api.ResourceQuota)
 	if !ok {
-		return nil, fmt.Errorf("invalid object type")
+		return nil, false, fmt.Errorf("invalid object type")
 	}
 
 	if !api.ValidNamespace(ctx, &resourceQuota.ObjectMeta) {
-		return nil, errors.NewConflict("resourceQuota", resourceQuota.Namespace, fmt.Errorf("ResourceQuota.Namespace does not match the provided context"))
+		return nil, false, errors.NewConflict("resourceQuota", resourceQuota.Namespace, fmt.Errorf("ResourceQuota.Namespace does not match the provided context"))
 	}
 
 	oldObj, err := rs.registry.Get(ctx, resourceQuota.Name)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	editResourceQuota := oldObj.(*api.ResourceQuota)
@@ -100,20 +98,18 @@ func (rs *REST) Update(ctx api.Context, obj runtime.Object) (<-chan apiserver.RE
 	editResourceQuota.Spec = resourceQuota.Spec
 
 	if errs := validation.ValidateResourceQuota(editResourceQuota); len(errs) > 0 {
-		return nil, errors.NewInvalid("resourceQuota", editResourceQuota.Name, errs)
+		return nil, false, errors.NewInvalid("resourceQuota", editResourceQuota.Name, errs)
 	}
 
-	return apiserver.MakeAsync(func() (runtime.Object, error) {
-		err := rs.registry.Update(ctx, editResourceQuota.Name, editResourceQuota)
-		if err != nil {
-			return nil, err
-		}
-		return rs.registry.Get(ctx, editResourceQuota.Name)
-	}), nil
+	if err := rs.registry.UpdateWithName(ctx, editResourceQuota.Name, editResourceQuota); err != nil {
+		return nil, false, err
+	}
+	out, err := rs.registry.Get(ctx, editResourceQuota.Name)
+	return out, false, err
 }
 
 // Delete deletes the ResourceQuota with the specified name
-func (rs *REST) Delete(ctx api.Context, name string) (<-chan apiserver.RESTResult, error) {
+func (rs *REST) Delete(ctx api.Context, name string) (runtime.Object, error) {
 	obj, err := rs.registry.Get(ctx, name)
 	if err != nil {
 		return nil, err
@@ -122,9 +118,7 @@ func (rs *REST) Delete(ctx api.Context, name string) (<-chan apiserver.RESTResul
 	if !ok {
 		return nil, fmt.Errorf("invalid object type")
 	}
-	return apiserver.MakeAsync(func() (runtime.Object, error) {
-		return &api.Status{Status: api.StatusSuccess}, rs.registry.Delete(ctx, name)
-	}), nil
+	return rs.registry.Delete(ctx, name)
 }
 
 // Get gets a ResourceQuota with the specified name
@@ -140,16 +134,16 @@ func (rs *REST) Get(ctx api.Context, name string) (runtime.Object, error) {
 	return resourceQuota, err
 }
 
-func (rs *REST) getAttrs(obj runtime.Object) (objLabels, objFields labels.Set, err error) {
-	return labels.Set{}, labels.Set{}, nil
+func (rs *REST) getAttrs(obj runtime.Object) (objLabels labels.Set, objFields fields.Set, err error) {
+	return labels.Set{}, fields.Set{}, nil
 }
 
-func (rs *REST) List(ctx api.Context, label, field labels.Selector) (runtime.Object, error) {
-	return rs.registry.List(ctx, &generic.SelectionPredicate{label, field, rs.getAttrs})
+func (rs *REST) List(ctx api.Context, label labels.Selector, field fields.Selector) (runtime.Object, error) {
+	return rs.registry.ListPredicate(ctx, &generic.SelectionPredicate{label, field, rs.getAttrs})
 }
 
-func (rs *REST) Watch(ctx api.Context, label, field labels.Selector, resourceVersion string) (watch.Interface, error) {
-	return rs.registry.Watch(ctx, &generic.SelectionPredicate{label, field, rs.getAttrs}, resourceVersion)
+func (rs *REST) Watch(ctx api.Context, label labels.Selector, field fields.Selector, resourceVersion string) (watch.Interface, error) {
+	return rs.registry.WatchPredicate(ctx, &generic.SelectionPredicate{label, field, rs.getAttrs}, resourceVersion)
 }
 
 // New returns a new api.ResourceQuota

@@ -21,6 +21,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/errors"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/watch"
 )
@@ -50,6 +51,12 @@ func NewMinionRegistry(minions []string, nodeResources api.NodeResources) *Minio
 	return &MinionRegistry{
 		Minions: *MakeMinionList(minions, nodeResources),
 	}
+}
+
+func (r *MinionRegistry) SetError(err error) {
+	r.Lock()
+	defer r.Unlock()
+	r.Err = err
 }
 
 func (r *MinionRegistry) ListMinions(ctx api.Context) (*api.NodeList, error) {
@@ -105,6 +112,6 @@ func (r *MinionRegistry) DeleteMinion(ctx api.Context, minionID string) error {
 	return r.Err
 }
 
-func (r *MinionRegistry) WatchMinions(ctx api.Context, label, field labels.Selector, resourceVersion string) (watch.Interface, error) {
+func (r *MinionRegistry) WatchMinions(ctx api.Context, label labels.Selector, field fields.Selector, resourceVersion string) (watch.Interface, error) {
 	return nil, r.Err
 }

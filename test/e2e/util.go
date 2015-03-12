@@ -17,173 +17,147 @@ limitations under the License.
 package e2e
 
 import (
-	"io/ioutil"
+	"fmt"
 	"math/rand"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/latest"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/client/clientcmd"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/clientauth"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/runtime"
-	"github.com/golang/glog"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+)
+
+const (
+	// Initial pod start can be delayed O(minutes) by slow docker pulls
+	// TODO: Make this 30 seconds once #4566 is resolved.
+	podStartTimeout = 5 * time.Minute
 )
 
 type testContextType struct {
+	kubeConfig string
 	authConfig string
 	certDir    string
 	host       string
 	repoRoot   string
 	provider   string
+	gceConfig  GCEConfig
 }
 
 var testContext testContextType
 
-func waitForPodRunning(c *client.Client, id string) {
-	for {
-		time.Sleep(5 * time.Second)
-		pod, err := c.Pods(api.NamespaceDefault).Get(id)
-		if err != nil {
-			glog.Warningf("Get pod %s failed: %v", id, err)
-			continue
-		}
-		if pod.Status.Phase == api.PodRunning {
-			break
-		}
-		glog.Infof("Waiting for pod %s status to be %q (found %q)", id, api.PodRunning, pod.Status.Phase)
-	}
+func Logf(format string, a ...interface{}) {
+	fmt.Fprintf(GinkgoWriter, "INFO: "+format+"\n", a...)
 }
 
-// waitForPodNotPending returns false if it took too long for the pod to go out of pending state.
-func waitForPodNotPending(c *client.Client, podName string) bool {
-	for i := 0; i < 10; i++ {
-		if i > 0 {
-			time.Sleep(5 * time.Second)
-		}
-		pod, err := c.Pods(api.NamespaceDefault).Get(podName)
+func Failf(format string, a ...interface{}) {
+	Fail(fmt.Sprintf(format, a...), 1)
+}
+
+type podCondition func(pod *api.Pod) (bool, error)
+
+func waitForPodCondition(c *client.Client, ns, podName, desc string, condition podCondition) error {
+	By(fmt.Sprintf("waiting up to %v for pod %s status to be %s", podStartTimeout, podName, desc))
+	for start := time.Now(); time.Since(start) < podStartTimeout; time.Sleep(5 * time.Second) {
+		pod, err := c.Pods(ns).Get(podName)
 		if err != nil {
-			glog.Warningf("Get pod %s failed: %v", podName, err)
+			Logf("Get pod failed, ignoring for 5s: %v", err)
 			continue
 		}
+		done, err := condition(pod)
+		if done {
+			return err
+		}
+		Logf("Waiting for pod %s status to be %q (found %q) (%.2f seconds)", podName, desc, pod.Status.Phase, time.Since(start).Seconds())
+	}
+	return fmt.Errorf("gave up waiting for pod %s to be %s after %.2f seconds", podName, desc, podStartTimeout.Seconds())
+}
+
+func waitForPodRunning(c *client.Client, podName string) error {
+	return waitForPodCondition(c, api.NamespaceDefault, podName, "running", func(pod *api.Pod) (bool, error) {
+		return (pod.Status.Phase == api.PodRunning), nil
+	})
+}
+
+// waitForPodNotPending returns an error if it took too long for the pod to go out of pending state.
+func waitForPodNotPending(c *client.Client, ns, podName string) error {
+	return waitForPodCondition(c, ns, podName, "!pending", func(pod *api.Pod) (bool, error) {
 		if pod.Status.Phase != api.PodPending {
-			glog.Infof("Saw pod %s out of pending state (found %q)", podName, pod.Status.Phase)
-			return true
+			Logf("Saw pod %s in namespace %s out of pending state (found %q)", podName, ns, pod.Status.Phase)
+			return true, nil
 		}
-		glog.Infof("Waiting for pod %s status to be !%q (found %q)", podName, api.PodPending, pod.Status.Phase)
-	}
-	glog.Warningf("Gave up waiting for pod %s status to go out of pending", podName)
-	return false
+		return false, nil
+	})
 }
 
-// waitForPodSuccess returns true if the pod reached state success, or false if it reached failure or ran too long.
-func waitForPodSuccess(c *client.Client, podName string, contName string) bool {
-	for i := 0; i < 10; i++ {
-		if i > 0 {
-			time.Sleep(5 * time.Second)
-		}
-		pod, err := c.Pods(api.NamespaceDefault).Get(podName)
-		if err != nil {
-			glog.Warningf("Get pod failed: %v", err)
-			continue
-		}
+// waitForPodSuccess returns nil if the pod reached state success, or an error if it reached failure or ran too long.
+func waitForPodSuccess(c *client.Client, podName string, contName string) error {
+	return waitForPodCondition(c, api.NamespaceDefault, podName, "success or failure", func(pod *api.Pod) (bool, error) {
 		// Cannot use pod.Status.Phase == api.PodSucceeded/api.PodFailed due to #2632
 		ci, ok := pod.Status.Info[contName]
 		if !ok {
-			glog.Infof("No Status.Info for container %s in pod %s yet", contName, podName)
+			Logf("No Status.Info for container %s in pod %s yet", contName, podName)
 		} else {
 			if ci.State.Termination != nil {
 				if ci.State.Termination.ExitCode == 0 {
-					glog.Infof("Saw pod success")
-					return true
+					By("Saw pod success")
+					return true, nil
 				} else {
-					glog.Infof("Saw pod failure: %+v", ci.State.Termination)
+					return true, fmt.Errorf("pod %s terminated with failure: %+v", podName, ci.State.Termination)
 				}
-				glog.Infof("Waiting for pod %q status to be success or failure", podName)
+				Logf("Waiting for pod %q status to be success or failure", podName)
 			} else {
-				glog.Infof("Nil State.Termination for container %s in pod %s so far", contName, podName)
+				Logf("Nil State.Termination for container %s in pod %s so far", contName, podName)
 			}
 		}
+		return false, nil
+	})
+}
+
+func loadConfig() (*client.Config, error) {
+	switch {
+	case testContext.kubeConfig != "":
+		fmt.Printf(">>> testContext.kubeConfig: %s\n", testContext.kubeConfig)
+		c, err := clientcmd.LoadFromFile(testContext.kubeConfig)
+		if err != nil {
+			return nil, fmt.Errorf("error loading kubeConfig: %v", err.Error())
+		}
+		return clientcmd.NewDefaultClientConfig(*c, &clientcmd.ConfigOverrides{}).ClientConfig()
+	case testContext.authConfig != "":
+		config := &client.Config{
+			Host: testContext.host,
+		}
+		info, err := clientauth.LoadFromFile(testContext.authConfig)
+		if err != nil {
+			return nil, fmt.Errorf("error loading authConfig: %v", err.Error())
+		}
+		// If the certificate directory is provided, set the cert paths to be there.
+		if testContext.certDir != "" {
+			Logf("Expecting certs in %v.", testContext.certDir)
+			info.CAFile = filepath.Join(testContext.certDir, "ca.crt")
+			info.CertFile = filepath.Join(testContext.certDir, "kubecfg.crt")
+			info.KeyFile = filepath.Join(testContext.certDir, "kubecfg.key")
+		}
+		mergedConfig, err := info.MergeWithConfig(*config)
+		return &mergedConfig, err
+	default:
+		return nil, fmt.Errorf("either kubeConfig or authConfig must be specified to load client config")
 	}
-	glog.Warningf("Gave up waiting for pod %q status to be success or failure", podName)
-	return false
 }
 
-// assetPath returns a path to the requested file; safe on all
-// OSes. NOTE: If you use an asset in this test, you MUST add it to
-// the KUBE_TEST_PORTABLE array in hack/lib/golang.sh.
-func assetPath(pathElements ...string) string {
-	return filepath.Join(testContext.repoRoot, filepath.Join(pathElements...))
-}
-
-func loadObjectOrDie(filePath string) runtime.Object {
-	data, err := ioutil.ReadFile(filePath)
+func loadClient() (*client.Client, error) {
+	config, err := loadConfig()
 	if err != nil {
-		glog.Fatalf("Failed to read object: %v", err)
+		return nil, fmt.Errorf("error creating client: %v", err.Error())
 	}
-	return decodeObjectOrDie(data)
-}
-
-func decodeObjectOrDie(data []byte) runtime.Object {
-	obj, err := latest.Codec.Decode(data)
+	c, err := client.New(config)
 	if err != nil {
-		glog.Fatalf("Failed to decode object: %v", err)
+		return nil, fmt.Errorf("error creating client: %v", err.Error())
 	}
-	return obj
-}
-
-func loadPodOrDie(filePath string) *api.Pod {
-	obj := loadObjectOrDie(filePath)
-	pod, ok := obj.(*api.Pod)
-	if !ok {
-		glog.Fatalf("Failed to load pod: %v", obj)
-	}
-	return pod
-}
-
-func loadClientOrDie() *client.Client {
-	config := client.Config{
-		Host: testContext.host,
-	}
-	info, err := clientauth.LoadFromFile(testContext.authConfig)
-	if err != nil {
-		glog.Fatalf("Error loading auth: %v", err)
-	}
-	// If the certificate directory is provided, set the cert paths to be there.
-	if testContext.certDir != "" {
-		glog.Infof("Expecting certs in %v.", testContext.certDir)
-		info.CAFile = filepath.Join(testContext.certDir, "ca.crt")
-		info.CertFile = filepath.Join(testContext.certDir, "kubecfg.crt")
-		info.KeyFile = filepath.Join(testContext.certDir, "kubecfg.key")
-	}
-	config, err = info.MergeWithConfig(config)
-	if err != nil {
-		glog.Fatalf("Error creating client")
-	}
-	c, err := client.New(&config)
-	if err != nil {
-		glog.Fatalf("Error creating client")
-	}
-	return c
-}
-
-func parsePodOrDie(json string) *api.Pod {
-	obj := decodeObjectOrDie([]byte(json))
-	pod, ok := obj.(*api.Pod)
-	if !ok {
-		glog.Fatalf("Failed to cast pod: %v", obj)
-	}
-	return pod
-}
-
-func parseServiceOrDie(json string) *api.Service {
-	obj := decodeObjectOrDie([]byte(json))
-	service, ok := obj.(*api.Service)
-	if !ok {
-		glog.Fatalf("Failed to cast service: %v", obj)
-	}
-	return service
+	return c, nil
 }
 
 // TODO: Allow service names to have the same form as names
@@ -193,4 +167,8 @@ func parseServiceOrDie(json string) *api.Service {
 func randomSuffix() string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	return strconv.Itoa(r.Int() % 10000)
+}
+
+func expectNoError(err error, explain ...interface{}) {
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), explain...)
 }

@@ -23,6 +23,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/errors"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/validation"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/util"
@@ -55,14 +56,30 @@ type RealPodControl struct {
 	kubeClient client.Interface
 }
 
+// Time period of main replication controller sync loop
+const DefaultSyncPeriod = 10 * time.Second
+
 func (r RealPodControl) createReplica(namespace string, controller api.ReplicationController) {
 	desiredLabels := make(labels.Set)
 	for k, v := range controller.Spec.Template.Labels {
 		desiredLabels[k] = v
 	}
+	desiredAnnotations := make(labels.Set)
+	for k, v := range controller.Spec.Template.Annotations {
+		desiredAnnotations[k] = v
+	}
+
+	// use the dash (if the name isn't too long) to make the pod name a bit prettier
+	prefix := fmt.Sprintf("%s-", controller.Name)
+	if ok, _ := validation.ValidatePodName(prefix, true); !ok {
+		prefix = controller.Name
+	}
+
 	pod := &api.Pod{
 		ObjectMeta: api.ObjectMeta{
-			Labels: desiredLabels,
+			Labels:       desiredLabels,
+			Annotations:  desiredAnnotations,
+			GenerateName: prefix,
 		},
 	}
 	if err := api.Scheme.Convert(&controller.Spec.Template.Spec, &pod.Spec); err != nil {
@@ -127,11 +144,24 @@ func (rm *ReplicationManager) watchControllers(resourceVersion *string) {
 			}
 			if event.Type == watch.Error {
 				util.HandleError(fmt.Errorf("error from watch during sync: %v", errors.FromObject(event.Object)))
+				// Clear the resource version, this may cause us to skip some elements on the watch,
+				// but we'll catch them on the synchronize() call, so it works out.
+				*resourceVersion = ""
 				continue
 			}
 			glog.V(4).Infof("Got watch: %#v", event)
 			rc, ok := event.Object.(*api.ReplicationController)
 			if !ok {
+				if status, ok := event.Object.(*api.Status); ok {
+					if status.Status == api.StatusFailure {
+						glog.Errorf("failed to watch: %v", status)
+						// Clear resource version here, as above, this won't hurt consistency, but we
+						// should consider introspecting more carefully here. (or make the apiserver smarter)
+						// "why not both?"
+						*resourceVersion = ""
+						continue
+					}
+				}
 				util.HandleError(fmt.Errorf("unexpected object: %#v", event.Object))
 				continue
 			}
@@ -166,12 +196,13 @@ func (rm *ReplicationManager) syncReplicationController(controller api.Replicati
 		return err
 	}
 	filteredList := FilterActivePods(podList.Items)
-	diff := len(filteredList) - controller.Spec.Replicas
+	activePods := len(filteredList)
+	diff := activePods - controller.Spec.Replicas
 	if diff < 0 {
 		diff *= -1
 		wait := sync.WaitGroup{}
 		wait.Add(diff)
-		glog.V(2).Infof("Too few replicas, creating %d\n", diff)
+		glog.V(2).Infof("Too few \"%s\" replicas, creating %d\n", controller.Name, diff)
 		for i := 0; i < diff; i++ {
 			go func() {
 				defer wait.Done()
@@ -180,7 +211,7 @@ func (rm *ReplicationManager) syncReplicationController(controller api.Replicati
 		}
 		wait.Wait()
 	} else if diff > 0 {
-		glog.V(2).Infof("Too many replicas, deleting %d\n", diff)
+		glog.V(2).Infof("Too many \"%s\" replicas, deleting %d\n", controller.Name, diff)
 		wait := sync.WaitGroup{}
 		wait.Add(diff)
 		for i := 0; i < diff; i++ {
@@ -190,6 +221,13 @@ func (rm *ReplicationManager) syncReplicationController(controller api.Replicati
 			}(i)
 		}
 		wait.Wait()
+	}
+	if controller.Status.Replicas != activePods {
+		controller.Status.Replicas = activePods
+		_, err = rm.kubeClient.ReplicationControllers(controller.Namespace).Update(&controller)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

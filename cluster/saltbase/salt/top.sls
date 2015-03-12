@@ -6,12 +6,19 @@ base:
   'roles:kubernetes-pool':
     - match: grain
     - docker
+{% if grains['cloud'] is defined and grains['cloud'] == 'azure' %}
+    - openvpn-client
+{% elif grains.network_mode is defined and grains.network_mode == 'calico' %}
+    - calico.node
+{% else %}
+    - sdn
+{% endif %}
     - kubelet
     - kube-proxy
-{% if pillar['enable_node_monitoring'] is defined and pillar['enable_node_monitoring'] %}
+{% if pillar.get('enable_node_monitoring', '').lower() == 'true' %}
     - cadvisor
 {% endif %}
-{% if pillar['enable_node_logging'] is defined and pillar['enable_node_logging'] %}
+{% if pillar.get('enable_node_logging', '').lower() == 'true' %}
   {% if pillar['logging_destination'] is defined and pillar['logging_destination'] == 'elasticsearch' %}
     - fluentd-es
   {% endif %}
@@ -20,13 +27,7 @@ base:
   {% endif %}
 {% endif %}
     - logrotate
-{% if grains['cloud'] is defined and grains['cloud'] == 'azure' %}
-    - openvpn-client
-{% elif grains.network_mode is defined and grains.network_mode == 'calico' %}
-    - calico.node
-{% else %}
-    - sdn
-{% endif %}
+    - monit
 
   'roles:kubernetes-master':
     - match: grain
@@ -38,7 +39,9 @@ base:
     - monit
     - nginx
     - kube-client-tools
+{% if grains['cloud'] is defined and grains['cloud'] != 'vagrant' %}
     - logrotate
+{% endif %}
     - kube-addons
 {% if grains['cloud'] is defined and grains['cloud'] == 'azure' %}
     - openvpn
@@ -47,11 +50,15 @@ base:
 {% else %}
     - sdn
 {% endif %}
+{% if grains['cloud'] is defined and grains['cloud'] == 'vagrant' %}
+    - docker
+    - sdn
+{% endif %}
+{% if grains['cloud'] is defined and grains['cloud'] == 'gce' %}
+    - docker
+{% endif %}
+
 
   'roles:kubernetes-pool-vsphere':
     - match: grain
     - static-routes
-
-  'roles:kubernetes-pool-vagrant':
-    - match: grain
-    - vagrant

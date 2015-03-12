@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/watch"
 )
@@ -38,6 +39,12 @@ func NewPodRegistry(pods *api.PodList) *PodRegistry {
 		Pods:        pods,
 		broadcaster: watch.NewBroadcaster(0, watch.WaitIfChannelFull),
 	}
+}
+
+func (r *PodRegistry) SetError(err error) {
+	r.Lock()
+	defer r.Unlock()
+	r.Err = err
 }
 
 func (r *PodRegistry) ListPodsPredicate(ctx api.Context, filter func(*api.Pod) bool) (*api.PodList, error) {
@@ -63,7 +70,7 @@ func (r *PodRegistry) ListPods(ctx api.Context, selector labels.Selector) (*api.
 	})
 }
 
-func (r *PodRegistry) WatchPods(ctx api.Context, label, field labels.Selector, resourceVersion string) (watch.Interface, error) {
+func (r *PodRegistry) WatchPods(ctx api.Context, label labels.Selector, field fields.Selector, resourceVersion string) (watch.Interface, error) {
 	return r.broadcaster.Watch(), nil
 }
 

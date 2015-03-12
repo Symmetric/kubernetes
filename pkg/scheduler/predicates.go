@@ -51,15 +51,15 @@ func (nodes ClientNodeInfo) GetNodeInfo(nodeID string) (*api.Node, error) {
 }
 
 func isVolumeConflict(volume api.Volume, pod *api.Pod) bool {
-	if volume.Source.GCEPersistentDisk == nil {
+	if volume.GCEPersistentDisk == nil {
 		return false
 	}
-	pdName := volume.Source.GCEPersistentDisk.PDName
+	pdName := volume.GCEPersistentDisk.PDName
 
 	manifest := &(pod.Spec)
 	for ix := range manifest.Volumes {
-		if manifest.Volumes[ix].Source.GCEPersistentDisk != nil &&
-			manifest.Volumes[ix].Source.GCEPersistentDisk.PDName == pdName {
+		if manifest.Volumes[ix].GCEPersistentDisk != nil &&
+			manifest.Volumes[ix].GCEPersistentDisk.PDName == pdName {
 			return true
 		}
 	}
@@ -95,8 +95,9 @@ type resourceRequest struct {
 func getResourceRequest(pod *api.Pod) resourceRequest {
 	result := resourceRequest{}
 	for ix := range pod.Spec.Containers {
-		result.memory += pod.Spec.Containers[ix].Memory.Value()
-		result.milliCPU += pod.Spec.Containers[ix].CPU.MilliValue()
+		limits := pod.Spec.Containers[ix].Resources.Limits
+		result.memory += limits.Memory().Value()
+		result.milliCPU += limits.Cpu().MilliValue()
 	}
 	return result
 }
@@ -120,8 +121,8 @@ func (r *ResourceFit) PodFitsResources(pod api.Pod, existingPods []api.Pod, node
 		memoryRequested += existingRequest.memory
 	}
 
-	totalMilliCPU := info.Spec.Capacity.Get(api.ResourceCPU).MilliValue()
-	totalMemory := info.Spec.Capacity.Get(api.ResourceMemory).Value()
+	totalMilliCPU := info.Spec.Capacity.Cpu().MilliValue()
+	totalMemory := info.Spec.Capacity.Memory().Value()
 
 	fitsCPU := totalMilliCPU == 0 || (totalMilliCPU-milliCPURequested) >= podRequest.milliCPU
 	fitsMemory := totalMemory == 0 || (totalMemory-memoryRequested) >= podRequest.memory
@@ -263,9 +264,16 @@ func (s *ServiceAffinity) CheckServiceAffinity(pod api.Pod, existingPods []api.P
 			if err != nil {
 				return false, err
 			}
-			if len(servicePods) > 0 {
+			// consider only the pods that belong to the same namespace
+			nsServicePods := []api.Pod{}
+			for _, nsPod := range servicePods {
+				if nsPod.Namespace == pod.Namespace {
+					nsServicePods = append(nsServicePods, nsPod)
+				}
+			}
+			if len(nsServicePods) > 0 {
 				// consider any service pod and fetch the minion its hosted on
-				otherMinion, err := s.nodeInfo.GetNodeInfo(servicePods[0].Status.Host)
+				otherMinion, err := s.nodeInfo.GetNodeInfo(nsServicePods[0].Status.Host)
 				if err != nil {
 					return false, err
 				}

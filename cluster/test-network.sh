@@ -14,12 +14,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Bring up a Kubernetes cluster.
+#
+# If the full release name (gs://<bucket>/<release>) is passed in then we take
+# that directly.  If not then we assume we are doing development stuff and take
+# the defaults in the release config.
+
 set -o errexit
 set -o nounset
 set -o pipefail
 
 KUBE_ROOT=$(dirname "${BASH_SOURCE}")/..
-source "${KUBE_ROOT}/cluster/kube-env.sh"
-source "${KUBE_ROOT}/cluster/${KUBERNETES_PROVIDER}/util.sh"
+KUBE_CONFIG_FILE="config-default.sh"
 
-${KUBE_ROOT}/hack/e2e-suite/goe2e.sh -tTestNetwork
+${KUBE_ROOT}/hack/ginkgo-e2e.sh --ginkgo.focus=Networking

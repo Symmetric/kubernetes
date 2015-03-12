@@ -98,22 +98,43 @@ func walkJSONFiles(inDir string, fn func(name, path string, data []byte)) error 
 
 func TestExampleObjectSchemas(t *testing.T) {
 	cases := map[string]map[string]runtime.Object{
-		"../api/examples": {
-			"controller":       &api.ReplicationController{},
-			"controller-list":  &api.ReplicationControllerList{},
-			"pod":              &api.Pod{},
-			"pod-list":         &api.PodList{},
-			"service":          &api.Service{},
-			"external-service": &api.Service{},
-			"service-list":     &api.ServiceList{},
+		"../docs/getting-started-guides": {
+			"pod": &api.Pod{},
+		},
+		"../cmd/integration": {
+			"controller": &api.ReplicationController{},
 		},
 		"../examples/guestbook": {
+			"frontend-controller":     &api.ReplicationController{},
+			"redis-slave-controller":  &api.ReplicationController{},
+			"redis-master-controller": &api.ReplicationController{},
+			"frontend-service":        &api.Service{},
+			"redis-master-service":    &api.Service{},
+			"redis-slave-service":     &api.Service{},
+		},
+		"../examples/guestbook/v1beta3": {
 			"frontend-controller":    &api.ReplicationController{},
 			"redis-slave-controller": &api.ReplicationController{},
-			"redis-master":           &api.Pod{},
+			"redis-master":           &api.ReplicationController{},
 			"frontend-service":       &api.Service{},
 			"redis-master-service":   &api.Service{},
 			"redis-slave-service":    &api.Service{},
+		},
+		"../examples/guestbook-go": {
+			"guestbook-controller":    &api.ReplicationController{},
+			"redis-slave-controller":  &api.ReplicationController{},
+			"redis-master-controller": &api.ReplicationController{},
+			"guestbook-service":       &api.Service{},
+			"redis-master-service":    &api.Service{},
+			"redis-slave-service":     &api.Service{},
+		},
+		"../examples/guestbook-go/v1beta3": {
+			"guestbook-controller":    &api.ReplicationController{},
+			"redis-slave-controller":  &api.ReplicationController{},
+			"redis-master-controller": &api.ReplicationController{},
+			"guestbook-service":       &api.Service{},
+			"redis-master-service":    &api.Service{},
+			"redis-slave-service":     &api.Service{},
 		},
 		"../examples/walkthrough": {
 			"pod1": &api.Pod{},
@@ -122,7 +143,11 @@ func TestExampleObjectSchemas(t *testing.T) {
 			"service":                   &api.Service{},
 			"replication-controller":    &api.ReplicationController{},
 		},
-		"../examples/update-demo": {
+		"../examples/update-demo/v1beta1": {
+			"kitten-rc":   &api.ReplicationController{},
+			"nautilus-rc": &api.ReplicationController{},
+		},
+		"../examples/update-demo/v1beta3": {
 			"kitten-rc":   &api.ReplicationController{},
 			"nautilus-rc": &api.ReplicationController{},
 		},

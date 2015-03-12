@@ -44,6 +44,10 @@ type Fake struct {
 	EventsList         api.EventList
 	LimitRangesList    api.LimitRangeList
 	ResourceQuotasList api.ResourceQuotaList
+	ResourceQuotaUsage api.ResourceQuotaUsage
+	NamespacesList     api.NamespaceList
+	SecretList         api.SecretList
+	Secret             api.Secret
 	Err                error
 	Watch              watch.Interface
 }
@@ -82,6 +86,14 @@ func (c *Fake) Pods(namespace string) PodInterface {
 
 func (c *Fake) Services(namespace string) ServiceInterface {
 	return &FakeServices{Fake: c, Namespace: namespace}
+}
+
+func (c *Fake) Secrets(namespace string) SecretsInterface {
+	return &FakeSecrets{Fake: c, Namespace: namespace}
+}
+
+func (c *Fake) Namespaces() NamespaceInterface {
+	return &FakeNamespaces{Fake: c}
 }
 
 func (c *Fake) ServerVersion() (*version.Info, error) {

@@ -206,7 +206,7 @@ func contactOthers(state *State) {
 		Host:   os.Getenv("KUBERNETES_RO_SERVICE_HOST") + ":" + os.Getenv("KUBERNETES_RO_SERVICE_PORT"),
 		Path:   "/api/v1beta1",
 	}
-	client := &client.Client{client.NewRESTClient(&masterRO, latest.Codec)}
+	client := &client.Client{client.NewRESTClient(&masterRO, "v1beta1", latest.Codec, true)}
 
 	// Do this repeatedly, in case there's some propagation delay with getting
 	// newly started pods into the endpoints list.
@@ -218,7 +218,7 @@ func contactOthers(state *State) {
 		}
 
 		for _, e := range endpoints.Endpoints {
-			contactSingle("http://"+e, state)
+			contactSingle("http://"+e.IP+":"+string(e.Port), state)
 		}
 
 		time.Sleep(5 * time.Second)

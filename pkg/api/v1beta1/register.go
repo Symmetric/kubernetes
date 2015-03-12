@@ -24,6 +24,12 @@ import (
 // Codec encodes internal objects to the v1beta1 scheme
 var Codec = runtime.CodecFor(api.Scheme, "v1beta1")
 
+// Dependency does nothing but give a hook for other packages to force a
+// compile-time error when this API version is eventually removed.  This is
+// useful, for example, to clean up things that are implicitly tied to
+// semantics of older APIs.
+const Dependency = true
+
 func init() {
 	api.Scheme.AddKnownTypes("v1beta1",
 		&Pod{},
@@ -37,10 +43,9 @@ func init() {
 		&EndpointsList{},
 		&Minion{},
 		&MinionList{},
+		&NodeInfo{},
 		&Binding{},
 		&Status{},
-		&ServerOp{},
-		&ServerOpList{},
 		&Event{},
 		&EventList{},
 		&ContainerManifest{},
@@ -53,12 +58,14 @@ func init() {
 		&ResourceQuota{},
 		&ResourceQuotaList{},
 		&ResourceQuotaUsage{},
+		&Namespace{},
+		&NamespaceList{},
+		&Secret{},
+		&SecretList{},
 	)
 	// Future names are supported
 	api.Scheme.AddKnownTypeWithName("v1beta1", "Node", &Minion{})
 	api.Scheme.AddKnownTypeWithName("v1beta1", "NodeList", &MinionList{})
-	api.Scheme.AddKnownTypeWithName("v1beta1", "Operation", &ServerOp{})
-	api.Scheme.AddKnownTypeWithName("v1beta1", "OperationList", &ServerOpList{})
 }
 
 func (*Pod) IsAnAPIObject()                       {}
@@ -71,11 +78,10 @@ func (*ServiceList) IsAnAPIObject()               {}
 func (*Endpoints) IsAnAPIObject()                 {}
 func (*EndpointsList) IsAnAPIObject()             {}
 func (*Minion) IsAnAPIObject()                    {}
+func (*NodeInfo) IsAnAPIObject()                  {}
 func (*MinionList) IsAnAPIObject()                {}
 func (*Binding) IsAnAPIObject()                   {}
 func (*Status) IsAnAPIObject()                    {}
-func (*ServerOp) IsAnAPIObject()                  {}
-func (*ServerOpList) IsAnAPIObject()              {}
 func (*Event) IsAnAPIObject()                     {}
 func (*EventList) IsAnAPIObject()                 {}
 func (*ContainerManifest) IsAnAPIObject()         {}
@@ -88,3 +94,7 @@ func (*LimitRangeList) IsAnAPIObject()            {}
 func (*ResourceQuota) IsAnAPIObject()             {}
 func (*ResourceQuotaList) IsAnAPIObject()         {}
 func (*ResourceQuotaUsage) IsAnAPIObject()        {}
+func (*Namespace) IsAnAPIObject()                 {}
+func (*NamespaceList) IsAnAPIObject()             {}
+func (*Secret) IsAnAPIObject()                    {}
+func (*SecretList) IsAnAPIObject()                {}

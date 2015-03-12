@@ -26,8 +26,11 @@ import (
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/meta"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/resource"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/client/cache"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/resourcequota"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/runtime"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/watch"
 )
 
 func init() {
@@ -37,14 +40,25 @@ func init() {
 }
 
 type quota struct {
-	client client.Interface
+	client  client.Interface
+	indexer cache.Indexer
 }
 
 func NewResourceQuota(client client.Interface) admission.Interface {
-	return &quota{client: client}
+	lw := &cache.ListWatch{
+		ListFunc: func() (runtime.Object, error) {
+			return client.ResourceQuotas(api.NamespaceAll).List(labels.Everything())
+		},
+		WatchFunc: func(resourceVersion string) (watch.Interface, error) {
+			return client.ResourceQuotas(api.NamespaceAll).Watch(labels.Everything(), labels.Everything(), resourceVersion)
+		},
+	}
+	indexer, reflector := cache.NewNamespaceKeyedIndexerAndReflector(lw, &api.ResourceQuota{}, 0)
+	reflector.Run()
+	return &quota{client: client, indexer: indexer}
 }
 
-var kindToResourceName = map[string]api.ResourceName{
+var resourceToResourceName = map[string]api.ResourceName{
 	"pods":                   api.ResourcePods,
 	"services":               api.ResourceServices,
 	"replicationControllers": api.ResourceReplicationControllers,
@@ -57,24 +71,42 @@ func (q *quota) Admit(a admission.Attributes) (err error) {
 	}
 
 	obj := a.GetObject()
-	kind := a.GetKind()
+	resource := a.GetResource()
 	name := "Unknown"
 	if obj != nil {
 		name, _ = meta.NewAccessor().Name(obj)
 	}
 
-	list, err := q.client.ResourceQuotas(a.GetNamespace()).List(labels.Everything())
-	if err != nil {
-		return apierrors.NewForbidden(a.GetKind(), name, fmt.Errorf("Unable to %s %s at this time because there was an error enforcing quota", a.GetOperation(), kind))
+	key := &api.ResourceQuota{
+		ObjectMeta: api.ObjectMeta{
+			Namespace: a.GetNamespace(),
+			Name:      "",
+		},
 	}
-
-	if len(list.Items) == 0 {
+	items, err := q.indexer.Index("namespace", key)
+	if err != nil {
+		return apierrors.NewForbidden(a.GetResource(), name, fmt.Errorf("Unable to %s %s at this time because there was an error enforcing quota", a.GetOperation(), resource))
+	}
+	if len(items) == 0 {
 		return nil
 	}
 
-	for i := range list.Items {
-		quota := list.Items[i]
-		dirty, err := IncrementUsage(a, &quota.Status, q.client)
+	for i := range items {
+		quota := items[i].(*api.ResourceQuota)
+
+		// we cannot modify the value directly in the cache, so we copy
+		status := &api.ResourceQuotaStatus{
+			Hard: api.ResourceList{},
+			Used: api.ResourceList{},
+		}
+		for k, v := range quota.Status.Hard {
+			status.Hard[k] = *v.Copy()
+		}
+		for k, v := range quota.Status.Used {
+			status.Used[k] = *v.Copy()
+		}
+
+		dirty, err := IncrementUsage(a, status, q.client)
 		if err != nil {
 			return err
 		}
@@ -87,10 +119,10 @@ func (q *quota) Admit(a admission.Attributes) (err error) {
 					Namespace:       quota.Namespace,
 					ResourceVersion: quota.ResourceVersion},
 			}
-			usage.Status = quota.Status
+			usage.Status = *status
 			err = q.client.ResourceQuotaUsages(usage.Namespace).Create(&usage)
 			if err != nil {
-				return apierrors.NewForbidden(a.GetKind(), name, fmt.Errorf("Unable to %s %s at this time because there was an error enforcing quota", a.GetOperation(), a.GetKind()))
+				return apierrors.NewForbidden(a.GetResource(), name, fmt.Errorf("Unable to %s %s at this time because there was an error enforcing quota", a.GetOperation(), a.GetResource()))
 			}
 		}
 	}
@@ -102,7 +134,7 @@ func (q *quota) Admit(a admission.Attributes) (err error) {
 // Return an error if the operation should not pass admission control
 func IncrementUsage(a admission.Attributes, status *api.ResourceQuotaStatus, client client.Interface) (bool, error) {
 	obj := a.GetObject()
-	kind := a.GetKind()
+	resourceName := a.GetResource()
 	name := "Unknown"
 	if obj != nil {
 		name, _ = meta.NewAccessor().Name(obj)
@@ -114,15 +146,15 @@ func IncrementUsage(a admission.Attributes, status *api.ResourceQuotaStatus, cli
 	}
 	// handle max counts for each kind of resource (pods, services, replicationControllers, etc.)
 	if a.GetOperation() == "CREATE" {
-		resourceName := kindToResourceName[a.GetKind()]
+		resourceName := resourceToResourceName[a.GetResource()]
 		hard, hardFound := status.Hard[resourceName]
 		if hardFound {
 			used, usedFound := status.Used[resourceName]
 			if !usedFound {
-				return false, apierrors.NewForbidden(kind, name, fmt.Errorf("Quota usage stats are not yet known, unable to admit resource until an accurate count is completed."))
+				return false, apierrors.NewForbidden(a.GetResource(), name, fmt.Errorf("Quota usage stats are not yet known, unable to admit resource until an accurate count is completed."))
 			}
 			if used.Value() >= hard.Value() {
-				return false, apierrors.NewForbidden(kind, name, fmt.Errorf("Limited to %s %s", hard.String(), kind))
+				return false, apierrors.NewForbidden(a.GetResource(), name, fmt.Errorf("Limited to %s %s", hard.String(), a.GetResource()))
 			} else {
 				status.Used[resourceName] = *resource.NewQuantity(used.Value()+int64(1), resource.DecimalSI)
 				dirty = true
@@ -130,7 +162,7 @@ func IncrementUsage(a admission.Attributes, status *api.ResourceQuotaStatus, cli
 		}
 	}
 	// handle memory/cpu constraints, and any diff of usage based on memory/cpu on updates
-	if a.GetKind() == "pods" && (set[api.ResourceMemory] || set[api.ResourceCPU]) {
+	if a.GetResource() == "pods" && (set[api.ResourceMemory] || set[api.ResourceCPU]) {
 		pod := obj.(*api.Pod)
 		deltaCPU := resourcequota.PodCPU(pod)
 		deltaMemory := resourcequota.PodMemory(pod)
@@ -138,7 +170,7 @@ func IncrementUsage(a admission.Attributes, status *api.ResourceQuotaStatus, cli
 		if a.GetOperation() == "UPDATE" {
 			oldPod, err := client.Pods(a.GetNamespace()).Get(pod.Name)
 			if err != nil {
-				return false, apierrors.NewForbidden(kind, name, err)
+				return false, apierrors.NewForbidden(resourceName, name, err)
 			}
 			oldCPU := resourcequota.PodCPU(oldPod)
 			oldMemory := resourcequota.PodMemory(oldPod)
@@ -150,10 +182,10 @@ func IncrementUsage(a admission.Attributes, status *api.ResourceQuotaStatus, cli
 		if hardMemFound {
 			used, usedFound := status.Used[api.ResourceMemory]
 			if !usedFound {
-				return false, apierrors.NewForbidden(kind, name, fmt.Errorf("Quota usage stats are not yet known, unable to admit resource until an accurate count is completed."))
+				return false, apierrors.NewForbidden(resourceName, name, fmt.Errorf("Quota usage stats are not yet known, unable to admit resource until an accurate count is completed."))
 			}
 			if used.Value()+deltaMemory.Value() > hardMem.Value() {
-				return false, apierrors.NewForbidden(kind, name, fmt.Errorf("Limited to %s memory", hardMem.String()))
+				return false, apierrors.NewForbidden(resourceName, name, fmt.Errorf("Limited to %s memory", hardMem.String()))
 			} else {
 				status.Used[api.ResourceMemory] = *resource.NewQuantity(used.Value()+deltaMemory.Value(), resource.DecimalSI)
 				dirty = true
@@ -163,10 +195,10 @@ func IncrementUsage(a admission.Attributes, status *api.ResourceQuotaStatus, cli
 		if hardCPUFound {
 			used, usedFound := status.Used[api.ResourceCPU]
 			if !usedFound {
-				return false, apierrors.NewForbidden(kind, name, fmt.Errorf("Quota usage stats are not yet known, unable to admit resource until an accurate count is completed."))
+				return false, apierrors.NewForbidden(resourceName, name, fmt.Errorf("Quota usage stats are not yet known, unable to admit resource until an accurate count is completed."))
 			}
 			if used.MilliValue()+deltaCPU.MilliValue() > hardCPU.MilliValue() {
-				return false, apierrors.NewForbidden(kind, name, fmt.Errorf("Limited to %s CPU", hardCPU.String()))
+				return false, apierrors.NewForbidden(resourceName, name, fmt.Errorf("Limited to %s CPU", hardCPU.String()))
 			} else {
 				status.Used[api.ResourceCPU] = *resource.NewMilliQuantity(used.MilliValue()+deltaCPU.MilliValue(), resource.DecimalSI)
 				dirty = true

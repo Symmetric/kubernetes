@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/client/record"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/kubelet"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/types"
 )
@@ -74,7 +75,7 @@ func CreatePodUpdate(op kubelet.PodOperation, source string, pods ...api.BoundPo
 }
 
 func createPodConfigTester(mode PodConfigNotificationMode) (chan<- interface{}, <-chan kubelet.PodUpdate, *PodConfig) {
-	config := NewPodConfig(mode)
+	config := NewPodConfig(mode, record.FromSource(api.EventSource{Component: "kubelet"}))
 	channel := config.Channel(TestSource)
 	ch := config.Updates()
 	return channel, ch, config
@@ -177,7 +178,7 @@ func TestNewPodAddedSnapshotAndUpdates(t *testing.T) {
 
 	// container updates are separated as UPDATE
 	pod := podUpdate.Pods[0]
-	pod.Spec.Containers = []api.Container{{Name: "bar", Image: "test"}}
+	pod.Spec.Containers = []api.Container{{Name: "bar", Image: "test", ImagePullPolicy: api.PullIfNotPresent}}
 	channel <- CreatePodUpdate(kubelet.ADD, NoneSource, pod)
 	expectPodUpdate(t, ch, CreatePodUpdate(kubelet.UPDATE, NoneSource, pod))
 }
@@ -195,7 +196,7 @@ func TestNewPodAddedSnapshot(t *testing.T) {
 
 	// container updates are separated as UPDATE
 	pod := podUpdate.Pods[0]
-	pod.Spec.Containers = []api.Container{{Name: "bar", Image: "test"}}
+	pod.Spec.Containers = []api.Container{{Name: "bar", Image: "test", ImagePullPolicy: api.PullIfNotPresent}}
 	channel <- CreatePodUpdate(kubelet.ADD, NoneSource, pod)
 	expectPodUpdate(t, ch, CreatePodUpdate(kubelet.SET, TestSource, pod))
 }
@@ -213,7 +214,7 @@ func TestNewPodAddedUpdatedRemoved(t *testing.T) {
 
 	// an kubelet.ADD should be converted to kubelet.UPDATE
 	pod := CreateValidPod("foo", "new", "test")
-	pod.Spec.Containers = []api.Container{{Name: "bar", Image: "test"}}
+	pod.Spec.Containers = []api.Container{{Name: "bar", Image: "test", ImagePullPolicy: api.PullIfNotPresent}}
 	podUpdate = CreatePodUpdate(kubelet.ADD, NoneSource, pod)
 	channel <- podUpdate
 	expectPodUpdate(t, ch, CreatePodUpdate(kubelet.UPDATE, NoneSource, pod))
@@ -236,7 +237,7 @@ func TestNewPodAddedUpdatedSet(t *testing.T) {
 
 	// should be converted to an kubelet.ADD, kubelet.REMOVE, and kubelet.UPDATE
 	pod := CreateValidPod("foo2", "new", "test")
-	pod.Spec.Containers = []api.Container{{Name: "bar", Image: "test"}}
+	pod.Spec.Containers = []api.Container{{Name: "bar", Image: "test", ImagePullPolicy: api.PullIfNotPresent}}
 	podUpdate = CreatePodUpdate(kubelet.SET, NoneSource, pod, CreateValidPod("foo3", "new", ""), CreateValidPod("foo4", "new", "test"))
 	channel <- podUpdate
 	expectPodUpdate(t, ch,

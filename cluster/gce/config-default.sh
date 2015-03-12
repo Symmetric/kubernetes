@@ -26,14 +26,14 @@ MINION_DISK_SIZE=10GB
 # TODO(dchen1107): Filed an internal issue to create an alias
 # for containervm image, so that gcloud will expand this
 # to the latest supported image.
-IMAGE=container-vm-v20150112
+IMAGE=container-vm-v20150305
 IMAGE_PROJECT=google-containers
 NETWORK=${KUBE_GCE_NETWORK:-default}
 INSTANCE_PREFIX="${KUBE_GCE_INSTANCE_PREFIX:-kubernetes}"
 MASTER_NAME="${INSTANCE_PREFIX}-master"
 MASTER_TAG="${INSTANCE_PREFIX}-master"
 MINION_TAG="${INSTANCE_PREFIX}-minion"
-MINION_NAMES=($(eval echo ${INSTANCE_PREFIX}-minion-{1..${NUM_MINIONS}}))
+MASTER_IP_RANGE="${MASTER_IP_RANGE:-10.246.0.0/24}"
 
 # Compute IP addresses for nodes.
 function increment_ipv4 {
@@ -49,9 +49,9 @@ function increment_ipv4 {
     ip_dec=$((ip_dec<<8))
     ip_dec=$((ip_dec + $comp))
   done
- 
+
   ip_dec=$((ip_dec + $incr_amount))
- 
+
   ip_components=()
   local i
   for ((i=0; i < 4; i++)); do
@@ -61,13 +61,13 @@ function increment_ipv4 {
   done
   echo "${ip_components[3]}.${ip_components[2]}.${ip_components[1]}.${ip_components[0]}"
 }
- 
+
 node_count="${NUM_MINIONS}"
 next_node="10.244.0.0"
 node_subnet_size=24
 node_subnet_count=$((2 ** (32-$node_subnet_size)))
 subnets=()
- 
+
 for ((node_num=0; node_num<node_count; node_num++)); do
   subnets+=("$next_node"/"${node_subnet_size}")
   next_node=$(increment_ipv4 $next_node $node_subnet_count)
@@ -81,21 +81,21 @@ MINION_SCOPES=("storage-ro" "compute-rw")
 POLL_SLEEP_INTERVAL=3
 PORTAL_NET="10.0.0.0/16"
 
-# Optional: Install node monitoring.
-ENABLE_NODE_MONITORING=true
-
-# Optional: When set to true, heapster will be setup as part of the cluster bring up.
-ENABLE_CLUSTER_MONITORING=true
-
 # When set to true, Docker Cache is enabled by default as part of the cluster bring up.
 ENABLE_DOCKER_REGISTRY_CACHE=true
 
+# Optional: Install node monitoring.
+ENABLE_NODE_MONITORING="${KUBE_ENABLE_NODE_MONITORING:-true}"
+
+# Optional: When set to true, heapster, Influxdb and Grafana will be setup as part of the cluster bring up.
+ENABLE_CLUSTER_MONITORING="${KUBE_ENABLE_CLUSTER_MONITORING:-true}"
+
 # Optional: Enable node logging.
-ENABLE_NODE_LOGGING=true
-LOGGING_DESTINATION=elasticsearch # options: elasticsearch, gcp
+ENABLE_NODE_LOGGING="${KUBE_ENABLE_NODE_LOGGING:-true}"
+LOGGING_DESTINATION="${KUBE_LOGGING_DESTINATION:-elasticsearch}" # options: elasticsearch, gcp
 
 # Optional: When set to true, Elasticsearch and Kibana will be setup as part of the cluster bring up.
-ENABLE_CLUSTER_LOGGING=true
+ENABLE_CLUSTER_LOGGING="${KUBE_ENABLE_CLUSTER_LOGGING:-true}"
 ELASTICSEARCH_LOGGING_REPLICAS=1
 
 # Don't require https for registries in our local RFC1918 network
@@ -106,3 +106,6 @@ ENABLE_CLUSTER_DNS=true
 DNS_SERVER_IP="10.0.0.10"
 DNS_DOMAIN="kubernetes.local"
 DNS_REPLICAS=1
+
+# Admission Controllers to invoke prior to persisting objects in cluster
+ADMISSION_CONTROL=NamespaceAutoProvision,LimitRanger,ResourceQuota

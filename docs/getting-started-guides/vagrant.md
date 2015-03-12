@@ -1,14 +1,15 @@
 ## Getting started with Vagrant
 
+Running kubernetes with Vagrant (and VirtualBox) is an easy way to run/test/develop on your local machine (Linux, Mac OS X).
+
 ### Prerequisites
 1. Install latest version >= 1.6.2 of vagrant from http://www.vagrantup.com/downloads.html
 2. Install latest version of Virtual Box from https://www.virtualbox.org/wiki/Downloads
-3. Install the `net-tools` package for your distribution for VirtualBox's private networks.
 4. Get or build a [binary release](binary_release.md)
 
 ### Setup
 
-By default, the Vagrant setup will create a single kubernetes-master and 1 kubernetes-minion. Each VM will take 512 MB, so make sure you have at least 2 GB of free memory. To start your local cluster, open a shell and run:
+By default, the Vagrant setup will create a single kubernetes-master and 1 kubernetes-minion. Each VM will take 1 GB, so make sure you have at least 2GB to 4GB of free memory (plus appropriate free disk space). To start your local cluster, open a shell and run:
 
 ```
 cd kubernetes
@@ -65,13 +66,13 @@ With your Kubernetes cluster up, you can manage the nodes in your cluster with t
 
 To push updates to new Kubernetes code after making source changes:
 ```
-vagrant provision
+cluster/kube-push.sh
 ```
 
 To stop and then restart the cluster:
 ```
 vagrant halt
-vagrant up
+cluster/kube-up.sh
 ```
 
 To destroy the cluster:
@@ -178,10 +179,9 @@ NAME   IMAGE(S   SELECTOR   REPLICAS
 ```
 
 Start a container running nginx with a replication controller and three replicas
-(note that this step uses the `kubecfg.sh` command instead of `kubectl.sh`):
 
 ```
-$ cluster/kubecfg.sh -p 8080:80 run dockerfile/nginx 3 myNginx
+$ cluster/kubectl.sh run-container my-nginx --image=dockerfile/nginx --replicas=3 --port=80
 ```
 
 When listing the pods, you will see that three containers have been started and are in Waiting state:
@@ -231,7 +231,7 @@ NAME   LABELS   SELECTOR   IP   PORT
 
 $ cluster/kubectl.sh get replicationControllers
 NAME      IMAGE(S            SELECTOR       REPLICAS
-myNginx   dockerfile/nginx   name=myNginx   3
+myNginx   dockerfile/nginx   name=my-nginx   3
 ```
 
 We did not start any services, hence there are none listed. But we see three replicas displayed properly.
@@ -239,7 +239,7 @@ Check the [guestbook](../../examples/guestbook/README.md) application to learn h
 You can already play with resizing the replicas with:
 
 ```
-$ cluster/kubecfg.sh resize myNginx 2
+$ cluster/kubectl.sh resize rc my-nginx --replicas=2
 $ cluster/kubectl.sh get pods
 NAME                                   IMAGE(S)            HOST                    LABELS         STATUS
 7813c8bd-3ffe-11e4-9036-0800279696e1   dockerfile/nginx    10.245.2.2/10.245.2.2   name=myNginx   Running
@@ -277,7 +277,7 @@ You probably have an incorrect ~/.kubernetes_vagrant_auth file for the cluster y
 rm ~/.kubernetes_vagrant_auth
 ```
 
-After using kubecfg.sh make sure that the correct credentials are set:
+After using kubectl.sh make sure that the correct credentials are set:
 
 ```
 cat ~/.kubernetes_vagrant_auth
@@ -306,6 +306,15 @@ You can control the number of minions that are instantiated via the environment 
 
 ```
 export NUM_MINIONS=1
+```
+
+#### I want my VMs to have more memory !
+
+You can control the memory allotted to virtual machines with the `KUBERNETES_MEMORY` environment variable.
+Just set it to the number of megabytes you would like the machines to have. For example:
+
+```
+export KUBERNETES_MEMORY=2048
 ```
 
 #### I ran vagrant suspend and nothing works!

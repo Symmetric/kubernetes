@@ -76,49 +76,49 @@ func NotTestAuthorize(t *testing.T) {
 	testCases := []struct {
 		User        user.DefaultInfo
 		RO          bool
-		Kind        string
+		Resource    string
 		NS          string
 		ExpectAllow bool
 	}{
 		// Scheduler can read pods
-		{User: uScheduler, RO: true, Kind: "pods", NS: "ns1", ExpectAllow: true},
-		{User: uScheduler, RO: true, Kind: "pods", NS: "", ExpectAllow: true},
+		{User: uScheduler, RO: true, Resource: "pods", NS: "ns1", ExpectAllow: true},
+		{User: uScheduler, RO: true, Resource: "pods", NS: "", ExpectAllow: true},
 		// Scheduler cannot write pods
-		{User: uScheduler, RO: false, Kind: "pods", NS: "ns1", ExpectAllow: false},
-		{User: uScheduler, RO: false, Kind: "pods", NS: "", ExpectAllow: false},
+		{User: uScheduler, RO: false, Resource: "pods", NS: "ns1", ExpectAllow: false},
+		{User: uScheduler, RO: false, Resource: "pods", NS: "", ExpectAllow: false},
 		// Scheduler can write bindings
-		{User: uScheduler, RO: true, Kind: "bindings", NS: "ns1", ExpectAllow: true},
-		{User: uScheduler, RO: true, Kind: "bindings", NS: "", ExpectAllow: true},
+		{User: uScheduler, RO: true, Resource: "bindings", NS: "ns1", ExpectAllow: true},
+		{User: uScheduler, RO: true, Resource: "bindings", NS: "", ExpectAllow: true},
 
 		// Alice can read and write anything in the right namespace.
-		{User: uAlice, RO: true, Kind: "pods", NS: "projectCaribou", ExpectAllow: true},
-		{User: uAlice, RO: true, Kind: "widgets", NS: "projectCaribou", ExpectAllow: true},
-		{User: uAlice, RO: true, Kind: "", NS: "projectCaribou", ExpectAllow: true},
-		{User: uAlice, RO: false, Kind: "pods", NS: "projectCaribou", ExpectAllow: true},
-		{User: uAlice, RO: false, Kind: "widgets", NS: "projectCaribou", ExpectAllow: true},
-		{User: uAlice, RO: false, Kind: "", NS: "projectCaribou", ExpectAllow: true},
+		{User: uAlice, RO: true, Resource: "pods", NS: "projectCaribou", ExpectAllow: true},
+		{User: uAlice, RO: true, Resource: "widgets", NS: "projectCaribou", ExpectAllow: true},
+		{User: uAlice, RO: true, Resource: "", NS: "projectCaribou", ExpectAllow: true},
+		{User: uAlice, RO: false, Resource: "pods", NS: "projectCaribou", ExpectAllow: true},
+		{User: uAlice, RO: false, Resource: "widgets", NS: "projectCaribou", ExpectAllow: true},
+		{User: uAlice, RO: false, Resource: "", NS: "projectCaribou", ExpectAllow: true},
 		// .. but not the wrong namespace.
-		{User: uAlice, RO: true, Kind: "pods", NS: "ns1", ExpectAllow: false},
-		{User: uAlice, RO: true, Kind: "widgets", NS: "ns1", ExpectAllow: false},
-		{User: uAlice, RO: true, Kind: "", NS: "ns1", ExpectAllow: false},
+		{User: uAlice, RO: true, Resource: "pods", NS: "ns1", ExpectAllow: false},
+		{User: uAlice, RO: true, Resource: "widgets", NS: "ns1", ExpectAllow: false},
+		{User: uAlice, RO: true, Resource: "", NS: "ns1", ExpectAllow: false},
 
 		// Chuck can read events, since anyone can.
-		{User: uChuck, RO: true, Kind: "events", NS: "ns1", ExpectAllow: true},
-		{User: uChuck, RO: true, Kind: "events", NS: "", ExpectAllow: true},
+		{User: uChuck, RO: true, Resource: "events", NS: "ns1", ExpectAllow: true},
+		{User: uChuck, RO: true, Resource: "events", NS: "", ExpectAllow: true},
 		// Chuck can't do other things.
-		{User: uChuck, RO: false, Kind: "events", NS: "ns1", ExpectAllow: false},
-		{User: uChuck, RO: true, Kind: "pods", NS: "ns1", ExpectAllow: false},
-		{User: uChuck, RO: true, Kind: "floop", NS: "ns1", ExpectAllow: false},
+		{User: uChuck, RO: false, Resource: "events", NS: "ns1", ExpectAllow: false},
+		{User: uChuck, RO: true, Resource: "pods", NS: "ns1", ExpectAllow: false},
+		{User: uChuck, RO: true, Resource: "floop", NS: "ns1", ExpectAllow: false},
 		// Chunk can't access things with no kind or namespace
 		// TODO: find a way to give someone access to miscelaneous endpoints, such as
 		// /healthz, /version, etc.
-		{User: uChuck, RO: true, Kind: "", NS: "", ExpectAllow: false},
+		{User: uChuck, RO: true, Resource: "", NS: "", ExpectAllow: false},
 	}
 	for _, tc := range testCases {
 		attr := authorizer.AttributesRecord{
 			User:      &tc.User,
 			ReadOnly:  tc.RO,
-			Kind:      tc.Kind,
+			Resource:  tc.Resource,
 			Namespace: tc.NS,
 		}
 		t.Logf("tc: %v -> attr %v", tc, attr)
@@ -265,4 +265,82 @@ func newWithContents(t *testing.T, contents string) (authorizer.Authorizer, erro
 
 	pl, err := NewFromFile(f.Name())
 	return pl, err
+}
+
+func TestPolicy(t *testing.T) {
+	tests := []struct {
+		policy  policy
+		attr    authorizer.Attributes
+		matches bool
+		name    string
+	}{
+		{
+			policy:  policy{},
+			attr:    authorizer.AttributesRecord{},
+			matches: true,
+			name:    "null",
+		},
+		{
+			policy: policy{
+				Readonly: true,
+			},
+			attr:    authorizer.AttributesRecord{},
+			matches: false,
+			name:    "read-only mismatch",
+		},
+		{
+			policy: policy{
+				User: "foo",
+			},
+			attr: authorizer.AttributesRecord{
+				User: &user.DefaultInfo{
+					Name: "bar",
+				},
+			},
+			matches: false,
+			name:    "user name mis-match",
+		},
+		{
+			policy: policy{
+				Resource: "foo",
+			},
+			attr: authorizer.AttributesRecord{
+				Resource: "bar",
+			},
+			matches: false,
+			name:    "resource mis-match",
+		},
+		{
+			policy: policy{
+				User:      "foo",
+				Resource:  "foo",
+				Namespace: "foo",
+			},
+			attr: authorizer.AttributesRecord{
+				User: &user.DefaultInfo{
+					Name: "foo",
+				},
+				Resource:  "foo",
+				Namespace: "foo",
+			},
+			matches: true,
+			name:    "namespace mis-match",
+		},
+		{
+			policy: policy{
+				Namespace: "foo",
+			},
+			attr: authorizer.AttributesRecord{
+				Namespace: "bar",
+			},
+			matches: false,
+			name:    "resource mis-match",
+		},
+	}
+	for _, test := range tests {
+		matches := test.policy.matches(test.attr)
+		if test.matches != matches {
+			t.Errorf("unexpected value for %s, expected: %s, saw: %s", test.name, test.matches, matches)
+		}
+	}
 }

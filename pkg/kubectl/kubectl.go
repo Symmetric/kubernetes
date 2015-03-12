@@ -18,77 +18,19 @@ limitations under the License.
 package kubectl
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"os"
-	"reflect"
 	"strings"
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/meta"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/util"
-	"github.com/GoogleCloudPlatform/kubernetes/pkg/version"
 )
 
 var apiVersionToUse = "v1beta1"
 
 const kubectlAnnotationPrefix = "kubectl.kubernetes.io/"
 
-func GetKubeClient(config *client.Config, matchVersion bool) (*client.Client, error) {
-	// TODO: get the namespace context when kubectl ns is completed
-	c, err := client.New(config)
-	if err != nil {
-		return nil, err
-	}
-
-	if matchVersion {
-		clientVersion := version.Get()
-		serverVersion, err := c.ServerVersion()
-		if err != nil {
-			return nil, fmt.Errorf("couldn't read version from server: %v\n", err)
-		}
-		if s := *serverVersion; !reflect.DeepEqual(clientVersion, s) {
-			return nil, fmt.Errorf("server version (%#v) differs from client version (%#v)!\n", s, clientVersion)
-		}
-	}
-
-	return c, nil
-}
-
 type NamespaceInfo struct {
 	Namespace string
-}
-
-// LoadNamespaceInfo parses a NamespaceInfo object from a file path. It creates a file at the specified path if it doesn't exist with the default namespace.
-func LoadNamespaceInfo(path string) (*NamespaceInfo, error) {
-	var ns NamespaceInfo
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		ns.Namespace = api.NamespaceDefault
-		err = SaveNamespaceInfo(path, &ns)
-		return &ns, err
-	}
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(data, &ns)
-	if err != nil {
-		return nil, err
-	}
-	return &ns, err
-}
-
-// SaveNamespaceInfo saves a NamespaceInfo object at the specified file path.
-func SaveNamespaceInfo(path string, ns *NamespaceInfo) error {
-	if !util.IsDNSLabel(ns.Namespace) {
-		return fmt.Errorf("namespace %s is not a valid DNS Label", ns.Namespace)
-	}
-	data, err := json.Marshal(ns)
-	err = ioutil.WriteFile(path, data, 0600)
-	return err
 }
 
 // TODO Move to labels package.
@@ -121,7 +63,20 @@ type OutputVersionMapper struct {
 
 // RESTMapping implements meta.RESTMapper by prepending the output version to the preferred version list.
 func (m OutputVersionMapper) RESTMapping(kind string, versions ...string) (*meta.RESTMapping, error) {
-	preferred := append([]string{m.OutputVersion}, versions...)
+	preferred := []string{m.OutputVersion}
+	for _, version := range versions {
+		if len(version) > 0 {
+			preferred = append(preferred, version)
+		}
+	}
+	// if the caller wants to use the default version list, try with the preferred version, and on
+	// error, use the default behavior.
+	if len(preferred) == 1 {
+		if m, err := m.RESTMapper.RESTMapping(kind, preferred...); err == nil {
+			return m, nil
+		}
+		preferred = nil
+	}
 	return m.RESTMapper.RESTMapping(kind, preferred...)
 }
 
@@ -143,9 +98,11 @@ func (e ShortcutExpander) VersionAndKindForResource(resource string) (defaultVer
 // indeed a shortcut. Otherwise, will return resource unmodified.
 func expandResourceShortcut(resource string) string {
 	shortForms := map[string]string{
-		"po":     "pods",
-		"rc":     "replicationcontrollers",
+		"po": "pods",
+		"rc": "replicationcontrollers",
+		// DEPRECATED: will be removed before 1.0
 		"se":     "services",
+		"svc":    "services",
 		"mi":     "minions",
 		"ev":     "events",
 		"limits": "limitRanges",

@@ -21,6 +21,8 @@ import (
 
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/errors"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/api/rest/resttest"
+	"github.com/GoogleCloudPlatform/kubernetes/pkg/fields"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/labels"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/registry/registrytest"
 )
@@ -38,27 +40,25 @@ func TestMinionRegistryREST(t *testing.T) {
 		t.Errorf("has unexpected error: %v", err)
 	}
 
-	c, err := ms.Create(ctx, &api.Node{ObjectMeta: api.ObjectMeta{Name: "baz"}})
+	obj, err := ms.Create(ctx, &api.Node{ObjectMeta: api.ObjectMeta{Name: "baz"}})
 	if err != nil {
 		t.Fatalf("insert failed: %v", err)
 	}
-	obj := <-c
-	if !api.HasObjectMetaSystemFieldValues(&obj.Object.(*api.Node).ObjectMeta) {
+	if !api.HasObjectMetaSystemFieldValues(&obj.(*api.Node).ObjectMeta) {
 		t.Errorf("storage did not populate object meta field values")
 	}
-	if m, ok := obj.Object.(*api.Node); !ok || m.Name != "baz" {
+	if m, ok := obj.(*api.Node); !ok || m.Name != "baz" {
 		t.Errorf("insert return value was weird: %#v", obj)
 	}
 	if obj, err := ms.Get(ctx, "baz"); err != nil || obj.(*api.Node).Name != "baz" {
 		t.Errorf("insert didn't actually insert")
 	}
 
-	c, err = ms.Delete(ctx, "bar")
+	obj, err = ms.Delete(ctx, "bar")
 	if err != nil {
 		t.Fatalf("delete failed")
 	}
-	obj = <-c
-	if s, ok := obj.Object.(*api.Status); !ok || s.Status != api.StatusSuccess {
+	if s, ok := obj.(*api.Status); !ok || s.Status != api.StatusSuccess {
 		t.Errorf("delete return value was weird: %#v", obj)
 	}
 	if _, err := ms.Get(ctx, "bar"); !errors.IsNotFound(err) {
@@ -70,7 +70,7 @@ func TestMinionRegistryREST(t *testing.T) {
 		t.Fatalf("delete returned wrong error")
 	}
 
-	list, err := ms.List(ctx, labels.Everything(), labels.Everything())
+	list, err := ms.List(ctx, labels.Everything(), fields.Everything())
 	if err != nil {
 		t.Errorf("got error calling List")
 	}
@@ -102,16 +102,19 @@ func TestMinionRegistryValidUpdate(t *testing.T) {
 		"foo": "bar",
 		"baz": "home",
 	}
-	if _, err = storage.Update(ctx, minion); err != nil {
+	if _, _, err = storage.Update(ctx, minion); err != nil {
 		t.Errorf("Unexpected error: %v", err)
 	}
 }
 
+var (
+	validSelector   = map[string]string{"a": "b"}
+	invalidSelector = map[string]string{"NoUppercaseOrSpecialCharsLike=Equals": "b"}
+)
+
 func TestMinionRegistryValidatesCreate(t *testing.T) {
 	storage := NewREST(registrytest.NewMinionRegistry([]string{"foo", "bar"}, api.NodeResources{}))
 	ctx := api.NewContext()
-	validSelector := map[string]string{"a": "b"}
-	invalidSelector := map[string]string{"NoUppercaseOrSpecialCharsLike=Equals": "b"}
 	failureCases := map[string]api.Node{
 		"zero-length Name": {
 			ObjectMeta: api.ObjectMeta{
@@ -119,7 +122,9 @@ func TestMinionRegistryValidatesCreate(t *testing.T) {
 				Labels: validSelector,
 			},
 			Status: api.NodeStatus{
-				HostIP: "something",
+				Addresses: []api.NodeAddress{
+					{Type: api.NodeLegacyHostIP, Address: "something"},
+				},
 			},
 		},
 		"invalid-labels": {
@@ -132,7 +137,7 @@ func TestMinionRegistryValidatesCreate(t *testing.T) {
 	for _, failureCase := range failureCases {
 		c, err := storage.Create(ctx, &failureCase)
 		if c != nil {
-			t.Errorf("Expected nil channel")
+			t.Errorf("Expected nil object")
 		}
 		if !errors.IsInvalid(err) {
 			t.Errorf("Expected to get an invalid resource error, got %v", err)
@@ -147,4 +152,24 @@ func contains(nodes *api.NodeList, nodeID string) bool {
 		}
 	}
 	return false
+}
+
+func TestCreate(t *testing.T) {
+	registry := registrytest.NewMinionRegistry([]string{"foo", "bar"}, api.NodeResources{})
+	test := resttest.New(t, NewREST(registry), registry.SetError).ClusterScope()
+	test.TestCreate(
+		// valid
+		&api.Node{
+			Status: api.NodeStatus{
+				Addresses: []api.NodeAddress{
+					{Type: api.NodeLegacyHostIP, Address: "something"},
+				},
+			},
+		},
+		// invalid
+		&api.Node{
+			ObjectMeta: api.ObjectMeta{
+				Labels: invalidSelector,
+			},
+		})
 }

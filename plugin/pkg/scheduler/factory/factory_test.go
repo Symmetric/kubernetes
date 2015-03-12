@@ -30,7 +30,10 @@ import (
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/client"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/client/cache"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/runtime"
+	algorithm "github.com/GoogleCloudPlatform/kubernetes/pkg/scheduler"
 	"github.com/GoogleCloudPlatform/kubernetes/pkg/util"
+	schedulerapi "github.com/GoogleCloudPlatform/kubernetes/plugin/pkg/scheduler/api"
+	latestschedulerapi "github.com/GoogleCloudPlatform/kubernetes/plugin/pkg/scheduler/api/latest"
 )
 
 func TestCreate(t *testing.T) {
@@ -46,6 +49,89 @@ func TestCreate(t *testing.T) {
 	factory.Create()
 }
 
+// Test configures a scheduler from a policies defined in a file
+// It combines some configurable predicate/priorities with some pre-defined ones
+func TestCreateFromConfig(t *testing.T) {
+	var configData []byte
+	var policy schedulerapi.Policy
+
+	handler := util.FakeHandler{
+		StatusCode:   500,
+		ResponseBody: "",
+		T:            t,
+	}
+	server := httptest.NewServer(&handler)
+	defer server.Close()
+	client := client.NewOrDie(&client.Config{Host: server.URL, Version: testapi.Version()})
+	factory := NewConfigFactory(client)
+
+	// Pre-register some predicate and priority functions
+	RegisterFitPredicate("PredicateOne", PredicateOne)
+	RegisterFitPredicate("PredicateTwo", PredicateTwo)
+	RegisterPriorityFunction("PriorityOne", PriorityOne, 1)
+	RegisterPriorityFunction("PriorityTwo", PriorityTwo, 1)
+
+	configData = []byte(`{
+		"kind" : "Policy",
+		"apiVersion" : "v1",
+		"predicates" : [
+			{"name" : "TestZoneAffinity", "argument" : {"serviceAffinity" : {"labels" : ["zone"]}}},
+			{"name" : "TestRequireZone", "argument" : {"labelsPresence" : {"labels" : ["zone"], "presence" : true}}},
+			{"name" : "PredicateOne"},
+			{"name" : "PredicateTwo"}
+		],
+		"priorities" : [
+			{"name" : "RackSpread", "weight" : 3, "argument" : {"serviceAntiAffinity" : {"label" : "rack"}}},
+			{"name" : "PriorityOne", "weight" : 2},
+			{"name" : "PriorityTwo", "weight" : 1}		]
+	}`)
+	err := latestschedulerapi.Codec.DecodeInto(configData, &policy)
+	if err != nil {
+		t.Errorf("Invalid configuration: %v", err)
+	}
+
+	factory.CreateFromConfig(policy)
+}
+
+func TestCreateFromEmptyConfig(t *testing.T) {
+	var configData []byte
+	var policy schedulerapi.Policy
+
+	handler := util.FakeHandler{
+		StatusCode:   500,
+		ResponseBody: "",
+		T:            t,
+	}
+	server := httptest.NewServer(&handler)
+	defer server.Close()
+	client := client.NewOrDie(&client.Config{Host: server.URL, Version: testapi.Version()})
+	factory := NewConfigFactory(client)
+
+	configData = []byte(`{}`)
+	err := latestschedulerapi.Codec.DecodeInto(configData, &policy)
+	if err != nil {
+		t.Errorf("Invalid configuration: %v", err)
+	}
+
+	factory.CreateFromConfig(policy)
+}
+
+func PredicateOne(pod api.Pod, existingPods []api.Pod, node string) (bool, error) {
+	return true, nil
+}
+
+func PredicateTwo(pod api.Pod, existingPods []api.Pod, node string) (bool, error) {
+	return true, nil
+}
+
+func PriorityOne(pod api.Pod, podLister algorithm.PodLister, minionLister algorithm.MinionLister) (algorithm.HostPriorityList, error) {
+	return []algorithm.HostPriority{}, nil
+}
+
+func PriorityTwo(pod api.Pod, podLister algorithm.PodLister, minionLister algorithm.MinionLister) (algorithm.HostPriorityList, error) {
+	return []algorithm.HostPriority{}, nil
+}
+
 func TestPollMinions(t *testing.T) {
 	table := []struct {
 		minions       []api.Node
@@ -57,7 +143,7 @@ func TestPollMinions(t *testing.T) {
 					ObjectMeta: api.ObjectMeta{Name: "foo"},
 					Status: api.NodeStatus{
 						Conditions: []api.NodeCondition{
-							{Kind: api.NodeReady, Status: api.ConditionFull},
+							{Type: api.NodeReady, Status: api.ConditionFull},
 						},
 					},
 				},
@@ -65,7 +151,24 @@ func TestPollMinions(t *testing.T) {
 					ObjectMeta: api.ObjectMeta{Name: "bar"},
 					Status: api.NodeStatus{
 						Conditions: []api.NodeCondition{
-							{Kind: api.NodeReachable, Status: api.ConditionFull},
+							{Type: api.NodeReachable, Status: api.ConditionFull},
+						},
+					},
+				},
+				{
+					ObjectMeta: api.ObjectMeta{Name: "fiz"},
+					Status: api.NodeStatus{
+						Conditions: []api.NodeCondition{
+							{Type: api.NodeSchedulable, Status: api.ConditionFull},
+						},
+					},
+				},
+				{
+					ObjectMeta: api.ObjectMeta{Name: "biz"},
+					Status: api.NodeStatus{
+						Conditions: []api.NodeCondition{
+							{Type: api.NodeReady, Status: api.ConditionFull},
+							{Type: api.NodeReachable, Status: api.ConditionFull},
 						},
 					},
 				},
@@ -73,22 +176,52 @@ func TestPollMinions(t *testing.T) {
 					ObjectMeta: api.ObjectMeta{Name: "baz"},
 					Status: api.NodeStatus{
 						Conditions: []api.NodeCondition{
-							{Kind: api.NodeReady, Status: api.ConditionFull},
-							{Kind: api.NodeReachable, Status: api.ConditionFull},
+							{Type: api.NodeReady, Status: api.ConditionFull},
+							{Type: api.NodeReady, Status: api.ConditionFull},
 						},
 					},
 				},
 				{
-					ObjectMeta: api.ObjectMeta{Name: "baz"},
+					ObjectMeta: api.ObjectMeta{Name: "fuz"},
 					Status: api.NodeStatus{
 						Conditions: []api.NodeCondition{
-							{Kind: api.NodeReady, Status: api.ConditionFull},
-							{Kind: api.NodeReady, Status: api.ConditionFull},
+							{Type: api.NodeSchedulable, Status: api.ConditionFull},
+							{Type: api.NodeReady, Status: api.ConditionFull},
+							{Type: api.NodeReachable, Status: api.ConditionFull},
+						},
+					},
+				},
+				{
+					ObjectMeta: api.ObjectMeta{Name: "buz"},
+					Status: api.NodeStatus{
+						Conditions: []api.NodeCondition{
+							{Type: api.NodeSchedulable, Status: api.ConditionNone},
+							{Type: api.NodeReady, Status: api.ConditionFull},
+							{Type: api.NodeReachable, Status: api.ConditionFull},
+						},
+					},
+				},
+				{
+					ObjectMeta: api.ObjectMeta{Name: "foobar"},
+					Status: api.NodeStatus{
+						Conditions: []api.NodeCondition{
+							{Type: api.NodeSchedulable, Status: api.ConditionFull},
+							{Type: api.NodeReady, Status: api.ConditionNone},
+							{Type: api.NodeReachable, Status: api.ConditionFull},
+						},
+					},
+				},
+				{
+					ObjectMeta: api.ObjectMeta{Name: "fizbiz"},
+					Status: api.NodeStatus{
+						Conditions: []api.NodeCondition{
+							{Type: api.NodeSchedulable, Status: api.ConditionFull},
+							{Type: api.NodeReachable, Status: api.ConditionNone},
 						},
 					},
 				},
 			},
-			expectedCount: 4,
+			expectedCount: 6,
 		},
 		{
 			minions: []api.Node{
@@ -96,7 +229,7 @@ func TestPollMinions(t *testing.T) {
 					ObjectMeta: api.ObjectMeta{Name: "foo"},
 					Status: api.NodeStatus{
 						Conditions: []api.NodeCondition{
-							{Kind: api.NodeReady, Status: api.ConditionFull},
+							{Type: api.NodeReady, Status: api.ConditionFull},
 						},
 					},
 				},
@@ -104,7 +237,7 @@ func TestPollMinions(t *testing.T) {
 					ObjectMeta: api.ObjectMeta{Name: "bar"},
 					Status: api.NodeStatus{
 						Conditions: []api.NodeCondition{
-							{Kind: api.NodeReady, Status: api.ConditionNone},
+							{Type: api.NodeReady, Status: api.ConditionNone},
 						},
 					},
 				},
@@ -117,8 +250,16 @@ func TestPollMinions(t *testing.T) {
 					ObjectMeta: api.ObjectMeta{Name: "foo"},
 					Status: api.NodeStatus{
 						Conditions: []api.NodeCondition{
-							{Kind: api.NodeReady, Status: api.ConditionFull},
-							{Kind: api.NodeReachable, Status: api.ConditionNone}},
+							{Type: api.NodeSchedulable, Status: api.ConditionFull},
+						},
+					},
+				},
+				{
+					ObjectMeta: api.ObjectMeta{Name: "bar"},
+					Status: api.NodeStatus{
+						Conditions: []api.NodeCondition{
+							{Type: api.NodeSchedulable, Status: api.ConditionNone},
+						},
 					},
 				},
 			},
@@ -130,8 +271,21 @@ func TestPollMinions(t *testing.T) {
 					ObjectMeta: api.ObjectMeta{Name: "foo"},
 					Status: api.NodeStatus{
 						Conditions: []api.NodeCondition{
-							{Kind: api.NodeReachable, Status: api.ConditionFull},
-							{Kind: "invalidValue", Status: api.ConditionNone}},
+							{Type: api.NodeReady, Status: api.ConditionFull},
+							{Type: api.NodeReachable, Status: api.ConditionNone}},
+					},
+				},
+			},
+			expectedCount: 1,
+		},
+		{
+			minions: []api.Node{
+				{
+					ObjectMeta: api.ObjectMeta{Name: "foo"},
+					Status: api.NodeStatus{
+						Conditions: []api.NodeCondition{
+							{Type: api.NodeReachable, Status: api.ConditionFull},
+							{Type: "invalidValue", Status: api.ConditionNone}},
 					},
 				},
 			},
@@ -195,7 +349,13 @@ func makeURL(suffix string) string {
 }
 
 func TestDefaultErrorFunc(t *testing.T) {
-	testPod := &api.Pod{ObjectMeta: api.ObjectMeta{Name: "foo", Namespace: "bar"}}
+	testPod := &api.Pod{
+		ObjectMeta: api.ObjectMeta{Name: "foo", Namespace: "bar"},
+		Spec: api.PodSpec{
+			RestartPolicy: api.RestartPolicy{Always: &api.RestartPolicyAlways{}},
+			DNSPolicy:     api.DNSClusterFirst,
+		},
+	}
 	handler := util.FakeHandler{
 		StatusCode:   200,
 		ResponseBody: runtime.EncodeOrDie(latest.Codec, testPod),
@@ -208,7 +368,7 @@ func TestDefaultErrorFunc(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 	factory := NewConfigFactory(client.NewOrDie(&client.Config{Host: server.URL, Version: testapi.Version()}))
-	queue := cache.NewFIFO()
+	queue := cache.NewFIFO(cache.MetaNamespaceKeyFunc)
 	podBackoff := podBackoff{
 		perPodBackoff:   map[string]*backoffEntry{},
 		clock:           &fakeClock{},
@@ -223,7 +383,7 @@ func TestDefaultErrorFunc(t *testing.T) {
 		// whole error handling system in the future. The test will time
 		// out if something doesn't work.
 		time.Sleep(10 * time.Millisecond)
-		got, exists := queue.Get("foo")
+		got, exists, _ := queue.Get(testPod)
 		if !exists {
 			continue
 		}
@@ -249,8 +409,8 @@ func TestMinionEnumerator(t *testing.T) {
 		t.Fatalf("expected %v, got %v", e, a)
 	}
 	for i := range testList.Items {
-		gotID, gotObj := me.Get(i)
-		if e, a := testList.Items[i].Name, gotID; e != a {
+		gotObj := me.Get(i)
+		if e, a := testList.Items[i].Name, gotObj.(*api.Node).Name; e != a {
 			t.Errorf("Expected %v, got %v", e, a)
 		}
 		if e, a := &testList.Items[i], gotObj; !reflect.DeepEqual(e, a) {
@@ -271,7 +431,15 @@ func TestBind(t *testing.T) {
 	table := []struct {
 		binding *api.Binding
 	}{
-		{binding: &api.Binding{PodID: "foo", Host: "foohost.kubernetes.mydomain.com"}},
+		{binding: &api.Binding{
+			ObjectMeta: api.ObjectMeta{
+				Namespace: api.NamespaceDefault,
+				Name:      "foo",
+			},
+			Target: api.ObjectReference{
+				Name: "foohost.kubernetes.mydomain.com",
+			},
+		}},
 	}
 
 	for _, item := range table {
@@ -290,7 +458,7 @@ func TestBind(t *testing.T) {
 			continue
 		}
 		expectedBody := runtime.EncodeOrDie(testapi.Codec(), item.binding)
-		handler.ValidateRequest(t, "/api/"+testapi.Version()+"/bindings", "POST", &expectedBody)
+		handler.ValidateRequest(t, "/api/"+testapi.Version()+"/bindings?namespace=default", "POST", &expectedBody)
 	}
 }
 

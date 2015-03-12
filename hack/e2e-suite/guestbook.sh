@@ -23,29 +23,95 @@ set -o nounset
 set -o pipefail
 
 KUBE_ROOT=$(dirname "${BASH_SOURCE}")/../..
+
+: ${KUBE_VERSION_ROOT:=${KUBE_ROOT}}
+: ${KUBECTL:="${KUBE_VERSION_ROOT}/cluster/kubectl.sh"}
+: ${KUBE_CONFIG_FILE:="config-test.sh"}
+
+export KUBECTL KUBE_CONFIG_FILE
+
 source "${KUBE_ROOT}/cluster/kube-env.sh"
-source "${KUBE_ROOT}/cluster/$KUBERNETES_PROVIDER/util.sh"
+source "${KUBE_VERSION_ROOT}/cluster/${KUBERNETES_PROVIDER}/util.sh"
 
 GUESTBOOK="${KUBE_ROOT}/examples/guestbook"
 
+function teardown() {
+  ${KUBECTL} stop -f "${GUESTBOOK}"
+  if [[ "${KUBERNETES_PROVIDER}" == "gce" ]]; then
+    local REGION=${ZONE%-*}
+    gcloud compute forwarding-rules delete -q --region ${REGION} "${INSTANCE_PREFIX}-default-frontend" || true
+    gcloud compute target-pools delete -q --region ${REGION} "${INSTANCE_PREFIX}-default-frontend" || true
+    gcloud compute firewall-rules delete guestbook-e2e-minion-8000 -q || true
+  fi
+}
+
+function wait_for_running() {
+  echo "Waiting for pods to come up."
+  local frontends master slaves pods all_running status i pod
+  frontends=($(${KUBECTL} get pods -l name=frontend -o template '--template={{range.items}}{{.id}} {{end}}'))
+  master=($(${KUBECTL} get pods -l name=redis-master -o template '--template={{range.items}}{{.id}} {{end}}'))
+  slaves=($(${KUBECTL} get pods -l name=redis-slave -o template '--template={{range.items}}{{.id}} {{end}}'))
+  pods=("${frontends[@]}" "${master[@]}" "${slaves[@]}")
+
+  all_running=0
+  for i in {1..30}; do
+    all_running=1
+    for pod in "${pods[@]}"; do
+      status=$(${KUBECTL} get pods "${pod}" -o template '--template={{.currentState.status}}') || true
+      if [[ "$status" != "Running" ]]; then
+        all_running=0
+        break
+      fi
+    done
+    if [[ "${all_running}" == 1 ]]; then
+      break
+    fi
+    sleep 10
+  done
+  if [[ "${all_running}" == 0 ]]; then
+    echo "Pods did not come up in time"
+    return 1
+  fi
+}
+
+prepare-e2e
+
+trap "teardown" EXIT
+
 # Launch the guestbook example
-$KUBECFG -c "${GUESTBOOK}/redis-master.json" create /pods
-$KUBECFG -c "${GUESTBOOK}/redis-master-service.json" create /services
-$KUBECFG -c "${GUESTBOOK}/redis-slave-controller.json" create /replicationControllers
+${KUBECTL} create -f "${GUESTBOOK}"
 
-sleep 5
+# Verify that all pods are running
+wait_for_running
 
-POD_LIST_1=$($KUBECFG '-template={{range.items}}{{.id}} {{end}}' list pods)
-echo "Pods running: ${POD_LIST_1}"
+if [[ "${KUBERNETES_PROVIDER}" == "gce" ]]; then
+  gcloud compute firewall-rules create --allow=tcp:8000 --network="${NETWORK}" --target-tags="${MINION_TAG}" guestbook-e2e-minion-8000
+fi
 
-$KUBECFG stop redis-slave-controller
-# Needed until issue #103 gets fixed
-sleep 25
-$KUBECFG rm redis-slave-controller
-$KUBECFG delete services/redis-master
-$KUBECFG delete pods/redis-master
+# Add a new entry to the guestbook and verify that it was remembered
+frontend_addr=$(${KUBECTL} get service frontend -o template '--template={{range .publicIPs}}{{.}}{{end}}:{{.port}}')
+echo "Waiting for frontend to serve content"
+serving=0
+for i in {1..12}; do
+  entry=$(curl "http://${frontend_addr}/index.php?cmd=get&key=messages") || true
+  echo ${entry}
+  if [[ "${entry}" == '{"data": ""}' ]]; then
+    serving=1
+    break
+  fi
+  sleep 10
+done
+if [[ "${serving}" == 0 ]]; then
+  echo "Pods did not start serving content in time"
+  exit 1
+fi
 
-POD_LIST_2=$($KUBECFG '-template={{range.items}}{{.id}} {{end}}' list pods)
-echo "Pods running after shutdown: ${POD_LIST_2}"
+curl "http://${frontend_addr}/index.php?cmd=set&key=messages&value=TestEntry"
+entry=$(curl "http://${frontend_addr}/index.php?cmd=get&key=messages")
+
+if [[ "${entry}" != '{"data": "TestEntry"}' ]]; then
+  echo "Wrong entry received: ${entry}"
+  exit 1
+fi
 
 exit 0

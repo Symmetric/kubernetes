@@ -27,7 +27,7 @@ import (
 
 func TestCanSupport(t *testing.T) {
 	plugMgr := volume.PluginMgr{}
-	plugMgr.InitPlugins(ProbeVolumePlugins(), &volume.FakeHost{"/tmp/fake"})
+	plugMgr.InitPlugins(ProbeVolumePlugins(), &volume.FakeHost{"/tmp/fake", nil})
 
 	plug, err := plugMgr.FindPluginByName("kubernetes.io/empty-dir")
 	if err != nil {
@@ -36,27 +36,27 @@ func TestCanSupport(t *testing.T) {
 	if plug.Name() != "kubernetes.io/empty-dir" {
 		t.Errorf("Wrong name: %s", plug.Name())
 	}
-	if !plug.CanSupport(&api.Volume{Source: api.VolumeSource{EmptyDir: &api.EmptyDir{}}}) {
+	if !plug.CanSupport(&api.Volume{VolumeSource: api.VolumeSource{EmptyDir: &api.EmptyDirVolumeSource{}}}) {
 		t.Errorf("Expected true")
 	}
-	if !plug.CanSupport(&api.Volume{Source: api.VolumeSource{}}) {
+	if !plug.CanSupport(&api.Volume{VolumeSource: api.VolumeSource{}}) {
 		t.Errorf("Expected true")
 	}
 }
 
 func TestPlugin(t *testing.T) {
 	plugMgr := volume.PluginMgr{}
-	plugMgr.InitPlugins(ProbeVolumePlugins(), &volume.FakeHost{"/tmp/fake"})
+	plugMgr.InitPlugins(ProbeVolumePlugins(), &volume.FakeHost{"/tmp/fake", nil})
 
 	plug, err := plugMgr.FindPluginByName("kubernetes.io/empty-dir")
 	if err != nil {
 		t.Errorf("Can't find the plugin by name")
 	}
 	spec := &api.Volume{
-		Name:   "vol1",
-		Source: api.VolumeSource{EmptyDir: &api.EmptyDir{}},
+		Name:         "vol1",
+		VolumeSource: api.VolumeSource{EmptyDir: &api.EmptyDirVolumeSource{}},
 	}
-	builder, err := plug.NewBuilder(spec, types.UID("poduid"))
+	builder, err := plug.NewBuilder(spec, &api.ObjectReference{UID: types.UID("poduid")})
 	if err != nil {
 		t.Errorf("Failed to make a new Builder: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestPlugin(t *testing.T) {
 
 func TestPluginBackCompat(t *testing.T) {
 	plugMgr := volume.PluginMgr{}
-	plugMgr.InitPlugins(ProbeVolumePlugins(), &volume.FakeHost{"/tmp/fake"})
+	plugMgr.InitPlugins(ProbeVolumePlugins(), &volume.FakeHost{"/tmp/fake", nil})
 
 	plug, err := plugMgr.FindPluginByName("kubernetes.io/empty-dir")
 	if err != nil {
@@ -109,7 +109,7 @@ func TestPluginBackCompat(t *testing.T) {
 	spec := &api.Volume{
 		Name: "vol1",
 	}
-	builder, err := plug.NewBuilder(spec, types.UID("poduid"))
+	builder, err := plug.NewBuilder(spec, &api.ObjectReference{UID: types.UID("poduid")})
 	if err != nil {
 		t.Errorf("Failed to make a new Builder: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestPluginBackCompat(t *testing.T) {
 
 func TestPluginLegacy(t *testing.T) {
 	plugMgr := volume.PluginMgr{}
-	plugMgr.InitPlugins(ProbeVolumePlugins(), &volume.FakeHost{"/tmp/fake"})
+	plugMgr.InitPlugins(ProbeVolumePlugins(), &volume.FakeHost{"/tmp/fake", nil})
 
 	plug, err := plugMgr.FindPluginByName("empty")
 	if err != nil {
@@ -134,11 +134,11 @@ func TestPluginLegacy(t *testing.T) {
 	if plug.Name() != "empty" {
 		t.Errorf("Wrong name: %s", plug.Name())
 	}
-	if plug.CanSupport(&api.Volume{Source: api.VolumeSource{EmptyDir: &api.EmptyDir{}}}) {
+	if plug.CanSupport(&api.Volume{VolumeSource: api.VolumeSource{EmptyDir: &api.EmptyDirVolumeSource{}}}) {
 		t.Errorf("Expected false")
 	}
 
-	if _, err := plug.NewBuilder(&api.Volume{Source: api.VolumeSource{EmptyDir: &api.EmptyDir{}}}, types.UID("poduid")); err == nil {
+	if _, err := plug.NewBuilder(&api.Volume{VolumeSource: api.VolumeSource{EmptyDir: &api.EmptyDirVolumeSource{}}}, &api.ObjectReference{UID: types.UID("poduid")}); err == nil {
 		t.Errorf("Expected failiure")
 	}
 
