@@ -60,12 +60,17 @@ ip6_tables:
 xt_set:
   kmod.present
 
-etcd-py:
-  pkg.installed:
-    - name: etcd
+python-pip:
+  pkg.installed
+
+libffi-devel:
+  pkg.installed
+
+python-etcd:
   pip.installed:
     - reload_modules: True
     - require:
       - pkg: python-pip
+      - pkg: libffi-dev
 
 {% endif %}

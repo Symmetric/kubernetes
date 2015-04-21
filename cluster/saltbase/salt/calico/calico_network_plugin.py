@@ -8,6 +8,7 @@ from subprocess import check_output, CalledProcessError
 ETCD_AUTHORITY_DEFAULT = "127.0.0.1:4001"
 ETCD_AUTHORITY_ENV = "ETCD_AUTHORITY"
 PROFILE_LABEL = 'CALICO_PROFILE'
+ETCD_PROFILE_PATH = '/calico/'
 
 
 def _create(args):
@@ -75,11 +76,15 @@ def _create_calico_interface(container_id, ip):
         env=env,
     ))
 
-def _get_calico_profile(pod_name):
+def _configure_calico_profile(container_id, pod_name):
     etcd_authority = os.getenv(ETCD_AUTHORITY_ENV, ETCD_AUTHORITY_DEFAULT)
     (host, port) = etcd_authority.split(":", 1)
     etcd_client = etcd.Client(host=host, port=int(port))
 
+    profile_name = _get_calico_profile(pod_name, etcd_client)
+    _apply_calico_profile(container_id, profile_name, etcd_client)
+
+def _get_calico_profile(pod_name, etcd_client):
     pod_json = etcd_client.read('/api/v1beta3/namespaces/default/pods/' + pod_name)
     pod_dict = json.loads(pod_json)
     pod_labels = pod_dict.get('labels')
@@ -90,7 +95,12 @@ def _get_calico_profile(pod_name):
     print('Got pod "%s" profile: %s' % (pod_name, pod_profile))
     return pod_profile
 
-def _apply_calico_profile(container_id, profile_name):
+def _apply_calico_profile(container_id, profile_name, etcd_client):
+    profile_exists = True
+    # try:
+    #     etcd_client.read(ETCD_PROFILE_PATH % {'name': profile_name})
+    # exept KeyError:
+    #     profile_exists = False
 
 
 if __name__ == '__main__':

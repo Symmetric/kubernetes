@@ -47,10 +47,11 @@ base:
 {% if grains['cloud'] is defined and grains['cloud'] == 'vagrant' %}
     - docker
     - kubelet
-{% elif grains['network_mode'] is defined and grains['network_mode'] == 'calico' %}
+{% if grains['network_mode'] is defined and grains['network_mode'] == 'calico' %}
     - calico.master
 {% else %}
     - sdn
+{% endif %}
 {% endif %}
 {% if grains['cloud'] is defined and grains['cloud'] == 'aws' %}
     - docker
