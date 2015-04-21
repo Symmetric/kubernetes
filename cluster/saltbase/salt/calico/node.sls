@@ -21,7 +21,7 @@ calico-network-plugin:
     - makedirs: True
     - mode: 744
     - require:
-      - pkg: etcd-py
+      - pip: python-etcd
 
 calico-node:
   cmd.run:
@@ -71,6 +71,6 @@ python-etcd:
     - reload_modules: True
     - require:
       - pkg: python-pip
-      - pkg: libffi-dev
+      - pkg: libffi-devel
 
 {% endif %}
