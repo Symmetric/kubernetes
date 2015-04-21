@@ -9,7 +9,7 @@ base:
 {% if grains['cloud'] is defined and grains['cloud'] == 'azure' %}
     - openvpn-client
 {% elif grains.network_mode is defined and grains.network_mode == 'calico' %}
-    - calico
+    - calico.node
 {% else %}
     - sdn
 {% endif %}
@@ -47,7 +47,9 @@ base:
 {% if grains['cloud'] is defined and grains['cloud'] == 'vagrant' %}
     - docker
     - kubelet
-{% if grains['network_mode'] is defined and grains['network_mode'] != 'calico' %}
+{% elif grains['network_mode'] is defined and grains['network_mode'] == 'calico' %}
+    - calico.master
+{% else %}
     - sdn
 {% endif %}
 {% if grains['cloud'] is defined and grains['cloud'] == 'aws' %}

@@ -1,0 +1,38 @@
+{
+"apiVersion": "v1beta3",
+"kind": "Pod",
+"metadata": {"name":"calico-etcd"},
+"spec":{
+"hostNetwork": true,
+"containers":[
+    {
+    "name": "etcd-container",
+    "image": "gcr.io/google_containers/etcd:2.0.8",
+    "command": [
+              "/usr/local/bin/etcd",
+	      "--addr",
+	      "0.0.0.0:6666",
+	      "--bind-addr",
+	      "0.0.0.0:6666",
+	      "--data-dir",
+	      "/var/etcd/calico-data"
+            ],
+    "ports":[
+      { "name": "clientport",
+        "containerPort": 6666,
+        "hostPort": 6666}
+        ],
+    "volumeMounts": [
+      { "name": "varetcd",
+        "mountPath": "/var/etcd",
+        "readOnly": false}
+        ]
+       }
+],
+"volumes":[
+  { "name": "varetcd",
+    "hostPath": {
+        "path": "/mnt/master-pd/var/etcd"}
+  }
+]
+}}

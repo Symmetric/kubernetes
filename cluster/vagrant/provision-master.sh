@@ -79,6 +79,7 @@ grains:
   networkInterfaceName: eth1
   api_servers: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
   cloud: vagrant
+  network_mode: calico
   roles:
     - kubernetes-master
   runtime_config: '$(echo "$RUNTIME_CONFIG" | sed -e "s/'/''/g")'
