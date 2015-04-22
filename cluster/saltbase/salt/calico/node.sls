@@ -63,6 +63,9 @@ xt_set:
 python-pip:
   pkg.installed
 
+python-devel:
+  pkg.installed
+
 libffi-devel:
   pkg.installed
 
@@ -71,6 +74,7 @@ python-etcd:
     - reload_modules: True
     - require:
       - pkg: python-pip
+      - pkg: python-devel
       - pkg: libffi-devel
 
 {% endif %}

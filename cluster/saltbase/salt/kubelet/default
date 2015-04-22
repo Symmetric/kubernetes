@@ -35,7 +35,7 @@
 
 {% set network_plugin = "" -%}
 {% set pod_infra = "" -%}
-{% if grains.network_mode == "calico" and 'kubernetes-minion' in grains.roles -%}
+{% if grains.network_mode == "calico" and 'kubernetes-pool' in grains.roles -%}
   {% set network_plugin = " --network_plugin=calico" -%}
   {% set pod_infra = " --pod_infra_container_image=paultiplady/pause" -%}
 {% endif -%}
