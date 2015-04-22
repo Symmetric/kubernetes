@@ -3,20 +3,20 @@
 "kind": "Pod",
 "metadata": {"name":"calico-etcd"},
 "spec":{
-"hostNetwork": true,
 "containers":[
     {
     "name": "etcd-container",
     "image": "gcr.io/google_containers/etcd:2.0.8",
     "command": [
-              "/usr/local/bin/etcd",
-	      "--addr",
-	      "0.0.0.0:6666",
-	      "--bind-addr",
-	      "0.0.0.0:6666",
-	      "--data-dir",
-	      "/var/etcd/calico-data"
-            ],
+          "/usr/local/bin/etcd",
+          "--name", "calico",
+	      "--data-dir", "/var/etcd/calico-data",
+	      "--advertise-client-urls", "http://{{grains.api_servers}}:6666",
+	      "--listen-client-urls", "http://0.0.0.0:6666",
+	      "--listen-peer-urls", "http://0.0.0.0:2380",
+	      "--initial-advertise-peer-urls", "http://{{grains.api_servers}}:2380",
+	      "--initial-cluster", "calico=http://{{grains.api_servers}}:2380"
+    ],
     "ports":[
       { "name": "clientport",
         "containerPort": 6666,
