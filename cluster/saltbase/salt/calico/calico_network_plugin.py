@@ -2,7 +2,7 @@
 import json
 import os
 import sys
-import etcd
+# import etcd
 from subprocess import check_output, CalledProcessError
 
 ETCD_AUTHORITY_DEFAULT = "127.0.0.1:4001"
@@ -20,9 +20,6 @@ def _create(args):
         ip = _read_docker_ip(docker_id)
         _delete_docker_interface(docker_id)
         _create_calico_interface(docker_id, ip)
-        #profile = _get_calico_profile(pod_name)
-        #if profile:
-        #  _apply_calico_profile(docker_id, profile)
     except CalledProcessError as e:
         print('Error code %d creating pod networking: %s\n%s' % (
             e.returncode, e.output, e))
@@ -64,44 +61,23 @@ def _delete_docker_interface(container_id):
     # Clean up after ourselves (don't want to leak netns files)
     print(check_output(['rm', netns_file]))
 
-def _create_calico_interface(container_id, ip):
-    print('Configuring Calico networking.')
+def _calicoctl(cmd):
     env = os.environ
     # Append to existing env, to avoid losing PATH etc.
     # TODO-PAT: This shouldn't be hardcoded
     env['ETCD_AUTHORITY'] = '10.245.1.2:6666'
-    print(check_output(
-        '/home/vagrant/calicoctl container add %s %s ' % (container_id, ip),
+    check_output(
+        '/home/vagrant/calicoctl ' + cmd,
         shell=True,
         env=env,
-    ))
+    )
 
-def _configure_calico_profile(container_id, pod_name):
-    etcd_authority = os.getenv(ETCD_AUTHORITY_ENV, ETCD_AUTHORITY_DEFAULT)
-    (host, port) = etcd_authority.split(":", 1)
-    etcd_client = etcd.Client(host=host, port=int(port))
+def _create_calico_interface(container_id, ip):
+    print('Configuring Calico networking.')
+    print(_calicoctl('container add %s %s' % (container_id, ip)))
 
-    profile_name = _get_calico_profile(pod_name, etcd_client)
-    _apply_calico_profile(container_id, profile_name, etcd_client)
-
-def _get_calico_profile(pod_name, etcd_client):
-    pod_json = etcd_client.read('/api/v1beta3/namespaces/default/pods/' + pod_name)
-    pod_dict = json.loads(pod_json)
-    pod_labels = pod_dict.get('labels')
-    print('Got pod "%s" labels: %s' % (pod_name, pod_labels))
-    pod_profile = None
-    if pod_labels:
-        pod_profile = pod_labels.get(PROFILE_LABEL)
-    print('Got pod "%s" profile: %s' % (pod_name, pod_profile))
-    return pod_profile
-
-def _apply_calico_profile(container_id, profile_name, etcd_client):
-    profile_exists = True
-    # try:
-    #     etcd_client.read(ETCD_PROFILE_PATH % {'name': profile_name})
-    # exept KeyError:
-    #     profile_exists = False
-
+def _add_endpoint_to_profile(container_id, profile_name):
+    _calicoctl('profile %s member add %s' % (profile_name, container_id))
 
 if __name__ == '__main__':
     print('Args: %s' % sys.argv)
