@@ -33,6 +33,7 @@ calico-node:
       - kmod: xt_set
       - service: docker
       - file: calicoctl
+      - container_bridge: cbr0
 
 calico-ip-pool-reset:
   cmd.run:
@@ -46,7 +47,7 @@ calico-ip-pool-reset:
 
 calico-ip-pool:
   cmd.run:
-    - name: /home/vagrant/calicoctl ipv4 pool add {{ grains.minion_container_ip}}/24
+    - name: /home/vagrant/calicoctl ipv4 pool add {{ grains['cbr-cidr'] }}
     - env:
       - ETCD_AUTHORITY: "{{ grains.api_servers }}:6666"
     - require:

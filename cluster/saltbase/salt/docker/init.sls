@@ -17,6 +17,24 @@ docker:
     - enable: True
     - require:
       - pkg: docker-io
+{% if grains.network_mode == "calico" and 'kubernetes-pool' in grains.roles %}
+      - file: {{ environment_file }}
+
+cbr0:
+  container_bridge.ensure:
+    - cidr: {{ grains['cbr-cidr'] }}
+    - mtu: 1460
+
+{{ environment_file }}:
+  file.managed:
+    - source: salt://docker/docker-defaults
+    - template: jinja
+    - user: root
+    - group: root
+    - mode: 644
+    - makedirs: true
+
+{% endif %}
 
 {% else %}
 
