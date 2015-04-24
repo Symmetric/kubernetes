@@ -71,7 +71,7 @@ grains:
   networkInterfaceName: eth1
   roles:
     - kubernetes-pool
-  cbr-cidr: '$(echo "CONTAINER_SUBNET" | sed -e "s/'/''/g")'
+  cbr-cidr: '$(echo "$CONTAINER_SUBNET" | sed -e "s/'/''/g")'
   minion_ip: '$(echo "$MINION_IP" | sed -e "s/'/''/g")'
 EOF
 
