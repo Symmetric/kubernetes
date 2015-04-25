@@ -462,6 +462,8 @@ type ContainerPort struct {
 	Protocol Protocol `json:"protocol,omitempty" description:"protocol for port; must be UDP or TCP; TCP if unspecified"`
 	// Optional: What host IP to bind the external port to.
 	HostIP string `json:"hostIP,omitempty" description:"host IP to bind the port to"`
+	// Optional: Selector to whitelist traffic from
+	AllowFrom string `json:"allowFrom,omitempty"`
 }
 
 // VolumeMount describes a mounting of a Volume within a container.

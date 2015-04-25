@@ -1,14 +1,23 @@
 #!/bin/python
+from collections import namedtuple
 import json
 import os
+import re
 import sys
-# import etcd
 from subprocess import check_output, CalledProcessError
+import requests
+import sh
 
-ETCD_AUTHORITY_DEFAULT = "127.0.0.1:4001"
+# Append to existing env, to avoid losing PATH etc.
+# TODO-PAT: This shouldn't be hardcoded
+env = os.environ.copy()
+env['ETCD_AUTHORITY'] = 'kubernetes-master:6666'
+calicoctl = sh.Command('/home/vagrant/calicoctl').bake(_env=env)
+
 ETCD_AUTHORITY_ENV = "ETCD_AUTHORITY"
 PROFILE_LABEL = 'CALICO_PROFILE'
 ETCD_PROFILE_PATH = '/calico/'
+AllowRule = namedtuple('AllowRule', ['port', 'proto', 'source'])
 
 
 class NetworkPlugin():
@@ -18,15 +27,14 @@ class NetworkPlugin():
 
     def create(self, args):
         """"Create a pod."""
-        self.pod_name = args[3]
+        # Calicoctl only
+        self.pod_name = args[3].replace('-', '_')
         self.docker_id = args[4]
         print('Configuring docker container %s' % self.docker_id)
 
         try:
             self._configure_interface()
-            #profile = _get_calico_profile(pod_name)
-            #if profile:
-            #  _apply_calico_profile(docker_id, profile)
+            self._configure_profile()
         except CalledProcessError as e:
             print('Error code %d creating pod networking: %s\n%s' % (
                 e.returncode, e.output, e))
@@ -37,7 +45,7 @@ class NetworkPlugin():
         ip = self._read_docker_ip()
         self._delete_docker_interface()
         print('Configuring Calico networking.')
-        print(_calicoctl('container add %s %s' % (self.docker_id, ip)))
+        print(calicoctl('container', 'add', self.docker_id, ip))
 
     def _read_docker_ip(self):
         """Get the ID for the pod's infra container."""
@@ -77,49 +85,153 @@ class NetworkPlugin():
         # Clean up after ourselves (don't want to leak netns files)
         print(check_output(['rm', netns_file]))
 
-    # def _configure_calico_profile(container_id, pod_name):
-    #     etcd_authority = os.getenv(ETCD_AUTHORITY_ENV, ETCD_AUTHORITY_DEFAULT)
-    #     (host, port) = etcd_authority.split(":", 1)
-    #     etcd_client = etcd.Client(host=host, port=int(port))
-    #
-    #     profile_name = _get_calico_profile(pod_name, etcd_client)
-    #     _create_calico_profile(profile_name, etcd_client)
-    #     _add_endpoint_to_profile(container_id, profile_name)
-    #
-    # def _get_calico_profile(pod_name, etcd_client):
-    #     pod_json = etcd_client.read('/api/v1beta3/namespaces/default/pods/' + pod_name)
-    #     pod_dict = json.loads(pod_json)
-    #     pod_labels = pod_dict.get('labels')
-    #     print('Got pod "%s" labels: %s' % (pod_name, pod_labels))
-    #     pod_profile = None
-    #     if pod_labels:
-    #         pod_profile = pod_labels.get(PROFILE_LABEL)
-    #     print('Got pod "%s" profile: %s' % (pod_name, pod_profile))
-    #     return pod_profile
-    #
-    # def _create_calico_profile(profile_name, etcd_client):
-    #     try:
-    #         etcd_client.read(ETCD_PROFILE_PATH % {'name': profile_name})
-    #     except KeyError:
-    #         return
-    #     else:
-    #         # Create the missing profile.
-    #         _calicoctl('profile add ' + profile_name)
-    #
-    # def _add_endpoint_to_profile(container_id, profile_name):
-    #     _calicoctl('profile %s member add %s' % (profile_name, container_id))
+    def _configure_profile(self):
+        """
+        Configure the calico profile for a pod.
 
-def _calicoctl(cmd):
-    """Call the calicoctl command."""
-    env = os.environ
-    # Append to existing env, to avoid losing PATH etc.
-    # TODO-PAT: This shouldn't be hardcoded
-    env['ETCD_AUTHORITY'] = '10.245.1.2:6666'
-    check_output(
-        '/home/vagrant/calicoctl ' + cmd,
-        shell=True,
-        env=env,
-    )
+        Currently assumes one pod with each name.
+        """
+        calicoctl('profile', 'add', self.pod_name)
+        ports = self._get_pod_ports()
+        rules = self._generate_rules(ports)
+        self._apply_rules(self.pod_name, rules)
+
+    def _get_pod_ports(self):
+        """
+        Get the list of ports on containers in the Pod.
+
+        :return list ports: the Kubernetes ContainerPort objects for the pod.
+        """
+        pods = self._get_pods()
+
+        for pod in pods:
+            print('Processing pod %s' % pod)
+            if pod['metadata']['name'].replace('-', '_') == self.pod_name:
+                named_pod = pod
+                break
+        else:
+            raise KeyError('Pod not found: ' + self.pod_name)
+        print('Got pod data %s' % pod)
+
+        ports = []
+        for container in named_pod['spec']['containers']:
+            try:
+                more_ports = container['ports']
+                print('Adding ports %s' % more_ports)
+                ports.extend(more_ports)
+            except KeyError:
+                pass
+        return ports
+
+    def _get_pods(self):
+        """
+        Get the list of pods from the Kube API server.
+
+        :return list pods: A list of Pod JSON API objects
+        """
+        bearer_token = self._get_api_token()
+        session = requests.Session()
+        session.headers.update({'Authorization': 'Bearer ' + bearer_token})
+        response = session.get(
+            'https://kubernetes-master:6443/api/v1beta3/pods',
+            verify=False,
+        )
+        response_body = response.text
+        # The response body contains some metadata, and the pods themselves
+        # under the 'items' key.
+        pods = json.loads(response_body)['items']
+        print('Got pods %s' % pods)
+        return pods
+
+    def _get_api_token(self):
+        """
+        Get the kubelet Bearer token for this node, used for HTTPS auth.
+        :return string: The token.
+        """
+        with open('/var/lib/kubelet/kubernetes_auth') as f:
+            json_string = f.read()
+        print('Got kubernetes_auth: ' + json_string)
+
+        auth_data = json.loads(json_string)
+        return auth_data['BearerToken']
+
+    def _generate_rules(self, ports):
+        """
+        Generate the Profile rules that have been specified on the Pod's ports.
+
+        We only create a Rule for a port if it has 'allowFrom' specified.
+
+        The Rule is structured to match the Calico etcd format.
+
+        :param list() ports: a list of ContainerPort objecs.
+        :return list() rules: the rules to be added to the Profile.
+        """
+        rules = []
+
+        if ports:
+            for port in ports:
+                try:
+                    rule = {
+                        'action': 'allow',
+                        'dst_ports': [port['containerPort']],
+                        'src_tag': port['allowFrom']
+                    }
+                    try:
+                        # Felix expects lower-case protocol strings.
+                        rule['protocol'] = port['protocol'].lower()
+                    except KeyError:
+                        # Don't need the protocol.
+                        pass
+                    rules.append(rule)
+                except KeyError:
+                    # Skip this rule if it's missing a mandatory field.
+                    # Per the Kube data model, containerPort is mandatory,
+                    # protocol is not.
+                    pass
+        else:
+            rules.append({
+
+            })
+        return rules
+
+    def _apply_rules(self, profile_name, rules):
+        """
+        Generate a new profile with the specified rules.
+
+        This contains inbound allow rules for all the ports we gathered,
+        plus a default 'allow from <profile_name>' to allow traffic within a
+        profile group.
+
+        :param string profile_name: The profile to update
+        :param list rules: The rules to set on the profile
+        :return:
+        """
+        profile = {
+            'id': profile_name,
+            'inbound_rules': rules + [
+                {
+                    'action': 'allow',
+                    'src_tag': profile_name
+                },
+                {
+                    'action': 'deny',
+                }
+            ],
+            'outbound_rules': [
+                {
+                    'action': 'allow',
+                }
+            ]
+        }
+        profile_string = json.dumps(profile, indent=2)
+        print('Final profile "%s": %s' % (profile_name, profile_string))
+
+        # Pipe the Profile JSON into the calicoctl command to update the rule.
+        calicoctl('profile', profile_name, 'rule', 'update',
+                  _in=profile_string)
+
+        # Also add the workload to the profile.
+        calicoctl('profile', profile_name, 'member', 'add', self.docker_id)
 
 if __name__ == '__main__':
     print('Args: %s' % sys.argv)
