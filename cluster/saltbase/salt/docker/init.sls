@@ -35,7 +35,7 @@ docker:
 
 cbr0:
   container_bridge.ensure:
-    - cidr: {{ grains['cbr-cidr'] }}
+    - cidr: {{ grains.container_subnet }}
     - mtu: 1460
 
 {% endif %}
