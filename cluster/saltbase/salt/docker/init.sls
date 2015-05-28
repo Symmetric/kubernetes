@@ -18,13 +18,33 @@ docker:
     - require:
       - pkg: docker-io
 {% if grains.network_mode == "calico" and 'kubernetes-pool' in grains.roles %}
-      - container_bridge: cbr0
+      - network: cbr0
+      - iptables: masquerade_rule
       - file: {{ environment_file }}
 
+
+# Workaround for bug https://github.com/saltstack/salt/issues/20570
+# Need to manually load kernel module for network.managed state.
+bridge:
+  kmod.present
+
 cbr0:
-  container_bridge.ensure:
-    - cidr: {{ grains.container_subnet }}
+  network.managed:
+    - enabled: True
+    - type: bridge
+    - ipaddr: {{ grains.container_addr }}
+    - netmask: {{ grains.container_netmask }}
     - mtu: 1460
+    - require:
+      - kmod: bridge
+
+masquerade_rule:
+  iptables.append:
+    - table: nat
+    - chain: POSTROUTING
+    - out-interface: eth1
+    - jump: MASQUERADE
+    - destination: "! 10.0.0.0/8"
 
 {{ environment_file }}:
   file.managed:
@@ -137,3 +157,4 @@ docker:
 {% endif %}
 
 {% endif %}
+
