@@ -25,4 +25,9 @@
   {% endif -%}
 
 {% endif -%}
-DAEMON_ARGS="{{daemon_args}} {{api_servers_with_port}} {{kubeconfig}} {{pillar['log_level']}}"
+{% set bind_addr = "" -%}
+{% if grains.network_mode == "calico" -%}
+  {% set bind_addr = " --bind-address={{grains.node_ip}}" -%}
+{% endif -%}
+
+DAEMON_ARGS="{{daemon_args}} {{api_servers_with_port}} {{kubeconfig}} {{bind_addr}} {{pillar['log_level']}}"
