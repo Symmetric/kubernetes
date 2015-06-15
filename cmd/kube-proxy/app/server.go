@@ -95,16 +95,42 @@ func (s *ProxyServer) Run(_ []string) error {
 	if net.IP(s.BindAddress).To4() == nil {
 		protocol = iptables.ProtocolIpv6
 	}
-	loadBalancer := proxy.NewLoadBalancerRR()
-	proxier, err := proxy.NewProxier(loadBalancer, net.IP(s.BindAddress), iptables.New(exec.New(), protocol), s.PortRange)
+
+	var proxier proxy.ProxyProvider
+	var loadBalancerHandler config.EndpointsConfigHandler
+
+	shouldUseProxier, err := proxy.ShouldUseProxierIptables()
 	if err != nil {
-		glog.Fatalf("Unable to create proxer: %v", err)
+		glog.Errorf("Error determining if we should use ProxierIptables: %v", err)
+	}
+	if err == nil && shouldUseProxier {
+		// This just monitors endpoints for ProxierIptables
+		loadBalancer := proxy.NewDummyLoadBalancerIptables()
+		// set our config.EndpointsConfigHandler
+		loadBalancerHandler = loadBalancer
+
+		proxier, err = proxy.NewProxierIptables(loadBalancer, net.IP(s.BindAddress), iptables.New(exec.New(), protocol), s.PortRange)
+		if err != nil {
+			glog.Fatalf("Unable to create proxier: %v", err)
+		}
+
+	} else {
+		// This is a proxy.LoadBalancer which NewProxier needs but has methods we don't need for
+		// our config.EndpointsConfigHandler.
+		loadBalancer := proxy.NewLoadBalancerRR()
+		// set EndpointsConfigHandler to our loadBalancer
+		loadBalancerHandler = loadBalancer
+
+		proxier, err = proxy.NewProxier(loadBalancer, net.IP(s.BindAddress), iptables.New(exec.New(), protocol), s.PortRange)
+		if err != nil {
+			glog.Fatalf("Unable to create proxer: %v", err)
+		}
 	}
 
 	// Wire proxier to handle changes to services
 	serviceConfig.RegisterHandler(proxier)
 	// And wire loadBalancer to handle changes to endpoints to services
-	endpointsConfig.RegisterHandler(loadBalancer)
+	endpointsConfig.RegisterHandler(loadBalancerHandler)
 
 	// Note: RegisterHandler() calls need to happen before creation of Sources because sources
 	// only notify on changes, and the initial update (on process start) may be lost if no handlers
