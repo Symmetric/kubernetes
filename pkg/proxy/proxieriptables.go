@@ -267,29 +267,20 @@ func (proxier *ProxierIptables) syncProxyRules() error {
 	rules.WriteString(fmt.Sprintf(fmtChain, iptablesContainerNodePortChain))
 
 	//flush the chains
-	rules.WriteString(fmt.Sprintf(fmtFlush, iptablesHostPortalChain))
-	rules.WriteString(fmt.Sprintf(fmtFlush, iptablesContainerPortalChain))
-	rules.WriteString(fmt.Sprintf(fmtFlush, iptablesHostNodePortChain))
-	rules.WriteString(fmt.Sprintf(fmtFlush, iptablesContainerNodePortChain))
+	rulesEnd.WriteString(fmt.Sprintf(fmtFlush, iptablesHostPortalChain))
+	rulesEnd.WriteString(fmt.Sprintf(fmtFlush, iptablesContainerPortalChain))
+	rulesEnd.WriteString(fmt.Sprintf(fmtFlush, iptablesHostNodePortChain))
+	rulesEnd.WriteString(fmt.Sprintf(fmtFlush, iptablesContainerNodePortChain))
 
-	// Remove old host & service chains
-	// WARNING: we can only remove the chain after it has been flushed and there are no references to it from
-	// any other chains.
-	// The order is important here, and this could fail if for some bizzare reason some unknown chain
-	// refers to one of the host or service chains then this will break.
-	// They should not be referring to them anyhow as the name of the chain may change on updates for a
-	// service, since they are simply numbered to ensure that they are reliable.
-	// Anyone else's iptables rules should be based on the address/port not our service/host chains.
+	// Flush old host & service chains
 	for _, chain := range proxier.hostChains {
 		rulesEnd.WriteString(fmt.Sprintf(fmtFlush, chain))
-		rulesEnd.WriteString(fmt.Sprintf(fmtDelete, chain))
 	}
 	for _, chain := range proxier.serviceChains {
 		rulesEnd.WriteString(fmt.Sprintf(fmtFlush, chain))
-		rulesEnd.WriteString(fmt.Sprintf(fmtDelete, chain))
 	}
-	proxier.hostChains = []string{}
-	proxier.serviceChains = []string{}
+	newHostChains := []string{}
+	newServiceChains := []string{}
 
 	// Used for naming chains
 	// Iptables on fedora has a 28 char limit on chain names, so we do KUBE-SERVICE-i,
@@ -300,9 +291,21 @@ func (proxier *ProxierIptables) syncProxyRules() error {
 
 		if info.proxyPort == 0 {
 			port, err := proxier.proxyPorts.AllocateNext()
-			// TODO: how do we handle this?
-			if err != nil {
-				glog.Errorf("failed to allocate proxy port for service %q: %v", name, err)
+			// TODO: should we handle this differently?
+			if err != nil || port == 0 {
+				if err != nil {
+					glog.Errorf("Failed to allocate proxy port for service %q: %v, falling back on getting a port from a socket.", name, err)
+				}
+				if port == 0 {
+					glog.Errorf("Proxy port set to zero for service: %v, falling back on getting a port from a socket.", name)
+				}
+				port, err = getRandomPortFromSocket(info.protocol, proxier.listenIP)
+				if err != nil {
+					glog.Errorf("Failed to get a random port from opening a socket: %v", err)
+				}
+			}
+			if port == 0 {
+				glog.Errorf("Proxy port still zero for service: %v, skipping.", name)
 				continue
 			}
 			info.proxyPort = port
@@ -357,8 +360,8 @@ func (proxier *ProxierIptables) syncProxyRules() error {
 		}
 
 		// Ensure we know what chains to flush/remove next time we generate the rules
-		proxier.hostChains = append(proxier.hostChains, hostChains...)
-		proxier.serviceChains = append(proxier.serviceChains, svcChain)
+		newHostChains = append(newHostChains, hostChains...)
+		newServiceChains = append(newServiceChains, svcChain)
 
 		n := len(hostChains)
 		for i, hostChain := range hostChains {
@@ -397,6 +400,29 @@ func (proxier *ProxierIptables) syncProxyRules() error {
 
 	}
 
+	//Delete chains no longer in use:
+	activeChains := make(map[string]bool) // use a map as a set
+	for _, chain := range newHostChains {
+		activeChains[chain] = true
+	}
+	for _, chain := range newServiceChains {
+		activeChains[chain] = true
+	}
+
+	for _, chain := range proxier.serviceChains {
+		if !activeChains[chain] {
+			rulesEnd.WriteString(fmt.Sprintf(fmtDelete, chain))
+		}
+	}
+	for _, chain := range proxier.hostChains {
+		if !activeChains[chain] {
+			rulesEnd.WriteString(fmt.Sprintf(fmtDelete, chain))
+		}
+	}
+
+	proxier.hostChains = newHostChains
+	proxier.serviceChains = newServiceChains
+
 	rulesEnd.WriteString("COMMIT\n")
 	lines := append(rules.Bytes(), rulesEnd.Bytes()...)
 
@@ -406,6 +432,54 @@ func (proxier *ProxierIptables) syncProxyRules() error {
 	// we manually flush the rules we need to flush.
 	err := iptables.Restore([]string{"--noflush"}, lines)
 	return err
+}
+
+// Temporary hack to deal with when the proxy allocator gives us 0 as the port
+// we can fall back on opening and closing a socket with the port set to 0
+// and getting the port from that chosen by the OS in theory.
+func getRandomPortFromSocket(protocol api.Protocol, ip net.IP) (int, error) {
+	host := ip.String()
+	switch strings.ToUpper(string(protocol)) {
+	case "TCP":
+		sock, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(0)))
+		if err != nil {
+			return 0, err
+		}
+		_, portStr, err := net.SplitHostPort(sock.Addr().String())
+		if err != nil {
+			sock.Close()
+			return 0, err
+		}
+		portNum, err := strconv.Atoi(portStr)
+		if err != nil {
+			sock.Close()
+			return 0, err
+		}
+		sock.Close()
+		return portNum, nil
+	case "UDP":
+		addr, err := net.ResolveUDPAddr("udp", net.JoinHostPort(host, strconv.Itoa(0)))
+		if err != nil {
+			return 0, err
+		}
+		sock, err := net.ListenUDP("udp", addr)
+		if err != nil {
+			return 0, err
+		}
+		_, portStr, err := net.SplitHostPort(sock.LocalAddr().String())
+		if err != nil {
+			sock.Close()
+			return 0, err
+		}
+		portNum, err := strconv.Atoi(portStr)
+		if err != nil {
+			sock.Close()
+			return 0, err
+		}
+		sock.Close()
+		return portNum, nil
+	}
+	return 0, fmt.Errorf("unknown protocol %q", protocol)
 }
 
 // Assumes proxier.mu is held
@@ -426,13 +500,24 @@ func (proxier *ProxierIptables) removeService(name ServicePortName, info *servic
 func (proxier *ProxierIptables) addServiceOnPort(service ServicePortName, protocol api.Protocol, proxyPort int, timeout time.Duration) (*serviceInfoIptables, error) {
 	portNum := proxyPort
 	if portNum == 0 {
-		// TODO: how do we handle this?
 		port, err := proxier.proxyPorts.AllocateNext()
-		if err != nil {
-			glog.Errorf("failed to allocate proxy port for service %q: %v", service, err)
-		} else {
-			portNum = port
+		// TODO: how do we handle this?
+		if err != nil || port == 0 {
+			if err != nil {
+				glog.Errorf("Failed to allocate proxy port for service %q: %v, falling back on getting a port from a socket.", service, err)
+			}
+			if port == 0 {
+				glog.Errorf("Proxy port set to zero for service: %v, falling back on getting a port from a socket.", service)
+			}
+			port, err = getRandomPortFromSocket(protocol, proxier.listenIP)
+			if err != nil {
+				glog.Errorf("Failed to get a random port from opening a socket: %v", err)
+			}
 		}
+		if port == 0 {
+			glog.Errorf("Proxy port still zero for service! (%v)", service)
+		}
+		portNum = port
 	}
 	si := &serviceInfoIptables{
 		proxyPort:           portNum,

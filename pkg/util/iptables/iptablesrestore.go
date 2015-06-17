@@ -18,6 +18,8 @@ package iptables
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"os/exec"
 )
 
@@ -42,7 +44,12 @@ func runCmdWithStdin(command string, args []string, input []byte) ([]byte, error
 	return b.Bytes(), err
 }
 
+// Restore runs iptables restore passing args as arugments and passing rules via stdin.
+// The error returned if any will also have the output appended in parentheses.
 func Restore(args []string, rules []byte) error {
-	_, err := runCmdWithStdin("iptables-restore", args, rules)
-	return err
+	b, err := runCmdWithStdin("iptables-restore", args, rules)
+	if err != nil {
+		return errors.New(fmt.Sprintf("%v (%s)", err, b))
+	}
+	return nil
 }

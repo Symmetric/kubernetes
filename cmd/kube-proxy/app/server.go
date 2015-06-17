@@ -104,6 +104,7 @@ func (s *ProxyServer) Run(_ []string) error {
 		glog.Errorf("Error determining if we should use ProxierIptables: %v", err)
 	}
 	if err == nil && shouldUseProxier {
+		glog.V(2).Info("Using ProxierIptables.")
 		// This just monitors endpoints for ProxierIptables
 		loadBalancer := proxy.NewDummyLoadBalancerIptables()
 		// set our config.EndpointsConfigHandler
@@ -115,6 +116,7 @@ func (s *ProxyServer) Run(_ []string) error {
 		}
 
 	} else {
+		glog.V(2).Info("Using Proxier.")
 		// This is a proxy.LoadBalancer which NewProxier needs but has methods we don't need for
 		// our config.EndpointsConfigHandler.
 		loadBalancer := proxy.NewLoadBalancerRR()
