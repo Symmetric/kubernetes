@@ -16,6 +16,10 @@ limitations under the License.
 
 package proxy
 
+/*
+NOTE: this needs to be tested in e2e since it uses iptables for everything.
+*/
+
 import (
 	"bytes"
 	"fmt"
