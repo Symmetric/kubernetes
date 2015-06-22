@@ -37,14 +37,23 @@ import (
 	"github.com/golang/glog"
 )
 
-// TODO: !!!!! make this accurate !!!!
+// NOTE: It will be tricky to determine the exact version needed.
+// Some features will of course be backported in various distros and this could get pretty hairy.
+// However iptables-1.4.0 was released 2007-Dec-22 and appears to have every feature we use,
+// so this seems prefectly reasonable for now.
+const (
+	IPTABLES_MIN_MAJOR = 1
+	IPTABLES_MIN_MINOR = 4
+	IPTABLES_MIN_PATCH = 0
+)
+
 func ShouldUseProxierIptables() (bool, error) {
 	exec := utilexec.New()
-	major, minor, _, err := iptables.GetIptablesVersion(exec)
+	major, minor, patch, err := iptables.GetIptablesVersion(exec)
 	if err != nil {
 		return false, err
 	}
-	return (major > 0) && (minor > 1), err
+	return (major >= IPTABLES_MIN_MAJOR) && (minor > IPTABLES_MIN_MINOR) && (patch > IPTABLES_MIN_PATCH), err
 }
 
 // This is the same as serviceInfo just without a socket
