@@ -94,8 +94,8 @@ ENABLE_CLUSTER_UI="${KUBE_ENABLE_CLUSTER_UI:-true}"
 #RUNTIME_CONFIG=""
 RUNTIME_CONFIG="api/v1"
 
-# Specify the inter-node network fabric. Valid values: openvswitch, calico
-NETWORK_MODE=${NETWORK_MODE-"openvswitch"}
+# Specify the inter-node network fabric. Valid values: flannel, calico
+NETWORK_MODE=${NETWORK_MODE-"flannel"}
 
 # Determine extra certificate names for master
 octets=($(echo "$SERVICE_CLUSTER_IP_RANGE" | sed -e 's|/.*||' -e 's/\./ /g'))

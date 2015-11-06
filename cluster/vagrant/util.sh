@@ -157,6 +157,7 @@ function create-provision-scripts {
     echo "NETWORK_MODE='${NETWORK_MODE:-}'"
     echo "ENABLE_CPU_CFS_QUOTA='${ENABLE_CPU_CFS_QUOTA}'"
     awk '!/^#/' "${KUBE_ROOT}/cluster/vagrant/provision-network-master.sh"
+    awk '!/^#/' "${KUBE_ROOT}/cluster/vagrant/provision-network-calico.sh"
     awk '!/^#/' "${KUBE_ROOT}/cluster/vagrant/provision-master.sh"
   ) > "${KUBE_TEMP}/master-start.sh"
 
@@ -184,6 +185,7 @@ function create-provision-scripts {
       echo "MASTER_EXTRA_SANS='${MASTER_EXTRA_SANS:-}'"
       echo "NETWORK_MODE='${NETWORK_MODE:-}'"
       awk '!/^#/' "${KUBE_ROOT}/cluster/vagrant/provision-network-minion.sh"
+      awk '!/^#/' "${KUBE_ROOT}/cluster/vagrant/provision-network-calico.sh"
       awk '!/^#/' "${KUBE_ROOT}/cluster/vagrant/provision-minion.sh"
     ) > "${KUBE_TEMP}/minion-start-${i}.sh"
   done

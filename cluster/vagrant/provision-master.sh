@@ -79,13 +79,13 @@ done
 echo "127.0.0.1 localhost" >> /etc/hosts # enables cmds like 'kubectl get pods' on master.
 echo "$MASTER_IP $MASTER_NAME" >> /etc/hosts
 
-if [ $NETWORK_MODE == "openvswitch" ]; then
+if [ $NETWORK_MODE == "flannel" ]; then
   # Configure the openvswitch network
-  echo "Provisioning openvswitch network"
-  provision-network
+  echo "Provisioning flannel network on master"
+  provision-network-master
 elif [ $NETWORK_MODE == "calico" ]; then
   # Configure the cbr for Calico networking.
-  echo "Provisioning cbr0 for Calico"
+  echo "Provisioning Calico network on master"
   provision-network-calico
 else
   echo "Unknown NETWORK_MODE $NETWORK_MODE"

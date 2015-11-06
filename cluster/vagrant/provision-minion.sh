@@ -107,11 +107,11 @@ for (( i=0; i<${#MINION_NAMES[@]}; i++)); do
 done
 
 # Configure the openvswitch network
-if [ $NETWORK_MODE != "calico" ]; then
-  echo "Provisioning openvswitch network"
+if [ $NETWORK_MODE == "flannel" ]; then
+  echo "Provisioning flannel network on minion"
   provision-network-minion
-else
-  echo "Provisioning cbr0 for Calico"
+elif [ $NETWORK_MODE == "calico" ]; then
+  echo "Provisioning Calico network on minion"
   provision-network-calico
 fi
 

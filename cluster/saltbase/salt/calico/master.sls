@@ -3,20 +3,26 @@
 calicoctl:
   file.managed:
     - name: /home/vagrant/calicoctl
-    - source: https://github.com/Metaswitch/calico-docker/releases/download/v0.4.8/calicoctl
-    - source_hash: sha512=814fd7369ba395c67e35245115a5885d1722300301d32585f9003f63e94cd26f77e325ae765ba2f6cba2fddec5ffdb8e4f7bc1b326f9dc343cf03e96b77a679e
+    - source: https://github.com/projectcalico/calico-docker/releases/download/v0.10.0/calicoctl
+    - source_hash: sha512=5dd8110cebfc00622d49adddcccda9d4906e6bca8a777297e6c0ffbcf0f7e40b42b0d6955f2e04b457b0919cb2d5ce39d2a3255d34e6ba36e8350f50319b3896
     - makedirs: True
     - mode: 744
 
+calico-node-image:
+  cmd.run:
+    - name: docker pull calico/node:v0.10.0
+    - require:
+      - service: docker
+
 calico-node:
   cmd.run:
-    - name: /home/vagrant/calicoctl node --ip={{ grains.node_ip }} --node-image=calico/node:v0.4.8
+    - name: /home/vagrant/calicoctl node --node-image=calico/node:v0.10.0
     - env:
       - ETCD_AUTHORITY: "{{ grains.api_servers }}:6666"
     - require:
       - kmod: ip6_tables
       - kmod: xt_set
-      - service: docker
+      - cmd: calico-node-image
       - file: calicoctl
       - cmd: etcd
 
@@ -33,6 +39,9 @@ etcd:
                --listen-peer-urls http://0.0.0.0:2380
                --initial-advertise-peer-urls http://{{grains.api_servers}}:2380
                --initial-cluster calico=http://{{grains.api_servers}}:2380
+    - unless: docker ps | grep calico-etcd
+    - require:
+      - service: docker
 
 ip6_tables:
   kmod.present
