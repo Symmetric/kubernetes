@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/version"
 )
 
@@ -33,7 +34,6 @@ type Interface interface {
 	PodsNamespacer
 	PodTemplatesNamespacer
 	ReplicationControllersNamespacer
-	DaemonsNamespacer
 	ServicesNamespacer
 	EndpointsNamespacer
 	VersionInterface
@@ -47,14 +47,12 @@ type Interface interface {
 	PersistentVolumesInterface
 	PersistentVolumeClaimsNamespacer
 	ComponentStatusesInterface
+	Extensions() ExtensionsInterface
+	Discovery() DiscoveryInterface
 }
 
 func (c *Client) ReplicationControllers(namespace string) ReplicationControllerInterface {
 	return newReplicationControllers(c, namespace)
-}
-
-func (c *Client) Daemons(namespace string) DaemonInterface {
-	return newDaemons(c, namespace)
 }
 
 func (c *Client) Nodes() NodeInterface {
@@ -115,18 +113,21 @@ func (c *Client) ComponentStatuses() ComponentStatusInterface {
 // VersionInterface has a method to retrieve the server version.
 type VersionInterface interface {
 	ServerVersion() (*version.Info, error)
-	ServerAPIVersions() (*api.APIVersions, error)
+	ServerAPIVersions() (*unversioned.APIVersions, error)
 }
 
 // APIStatus is exposed by errors that can be converted to an api.Status object
 // for finer grained details.
 type APIStatus interface {
-	Status() api.Status
+	Status() unversioned.Status
 }
 
 // Client is the implementation of a Kubernetes client.
 type Client struct {
 	*RESTClient
+	*ExtensionsClient
+	// TODO: remove this when we re-structure pkg/client.
+	*DiscoveryClient
 }
 
 // ServerVersion retrieves and parses the server's version.
@@ -144,12 +145,12 @@ func (c *Client) ServerVersion() (*version.Info, error) {
 }
 
 // ServerAPIVersions retrieves and parses the list of API versions the server supports.
-func (c *Client) ServerAPIVersions() (*api.APIVersions, error) {
+func (c *Client) ServerAPIVersions() (*unversioned.APIVersions, error) {
 	body, err := c.Get().UnversionedPath("").Do().Raw()
 	if err != nil {
 		return nil, err
 	}
-	var v api.APIVersions
+	var v unversioned.APIVersions
 	err = json.Unmarshal(body, &v)
 	if err != nil {
 		return nil, fmt.Errorf("got '%s': %v", string(body), err)
@@ -196,4 +197,12 @@ func IsTimeout(err error) bool {
 		return true
 	}
 	return false
+}
+
+func (c *Client) Extensions() ExtensionsInterface {
+	return c.ExtensionsClient
+}
+
+func (c *Client) Discovery() DiscoveryInterface {
+	return c.DiscoveryClient
 }

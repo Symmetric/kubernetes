@@ -23,13 +23,13 @@ import (
 	"github.com/golang/glog"
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/meta"
+	"k8s.io/kubernetes/pkg/client/cache"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/client/unversioned/cache"
 	"k8s.io/kubernetes/pkg/controller/framework"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/runtime"
-	"k8s.io/kubernetes/pkg/util"
+	"k8s.io/kubernetes/pkg/util/sets"
 	"k8s.io/kubernetes/pkg/watch"
 )
 
@@ -45,7 +45,7 @@ func nameIndexFunc(obj interface{}) ([]string, error) {
 // ServiceAccountsControllerOptions contains options for running a ServiceAccountsController
 type ServiceAccountsControllerOptions struct {
 	// Names is the set of service account names to ensure exist in every namespace
-	Names util.StringSet
+	Names sets.String
 
 	// ServiceAccountResync is the interval between full resyncs of ServiceAccounts.
 	// If non-zero, all service accounts will be re-listed this often.
@@ -59,7 +59,7 @@ type ServiceAccountsControllerOptions struct {
 }
 
 func DefaultServiceAccountsControllerOptions() ServiceAccountsControllerOptions {
-	return ServiceAccountsControllerOptions{Names: util.NewStringSet("default")}
+	return ServiceAccountsControllerOptions{Names: sets.NewString("default")}
 }
 
 // NewServiceAccountsController returns a new *ServiceAccountsController.
@@ -117,7 +117,7 @@ type ServiceAccountsController struct {
 	stopChan chan struct{}
 
 	client client.Interface
-	names  util.StringSet
+	names  sets.String
 
 	serviceAccounts cache.Indexer
 	namespaces      cache.Indexer

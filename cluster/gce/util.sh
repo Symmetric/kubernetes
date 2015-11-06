@@ -84,8 +84,8 @@ function verify-prereqs {
   if [ ! -w $(dirname `which gcloud`) ]; then
     sudo_prefix="sudo"
   fi
-  ${sudo_prefix} gcloud ${gcloud_prompt:-} components update preview || true
   ${sudo_prefix} gcloud ${gcloud_prompt:-} components update alpha || true
+  ${sudo_prefix} gcloud ${gcloud_prompt:-} components update beta || true
   ${sudo_prefix} gcloud ${gcloud_prompt:-} components update || true
 }
 
@@ -176,7 +176,7 @@ function copy-if-not-staged() {
   local -r hash=$4
 
   if already-staged "${tar}" "${hash}"; then
-    echo "+++ $(basename ${tar}) already staged ('rm ${tar}.sha1' to force)"
+    echo "+++ $(basename ${tar}) already staged ('rm ${tar}.uploaded.sha1' to force)"
   else
     echo "${hash}" > "${tar}.sha1"
     gsutil -m -q -h "Cache-Control:private, max-age=0" cp "${tar}" "${tar}.sha1" "${staging_path}"
@@ -354,7 +354,7 @@ function create-node-template {
   detect-project
 
   # First, ensure the template doesn't exist.
-  # TODO(mbforbes): To make this really robust, we need to parse the output and
+  # TODO(zmerlynn): To make this really robust, we need to parse the output and
   #                 add retries. Just relying on a non-zero exit code doesn't
   #                 distinguish an ephemeral failed call from a "not-exists".
   if gcloud compute instance-templates describe "$1" --project "${PROJECT}" &>/dev/null; then
@@ -465,6 +465,7 @@ function write-master-env {
   if [[ "${REGISTER_MASTER_KUBELET:-}" == "true" ]]; then
     KUBELET_APISERVER="${MASTER_NAME}"
   fi
+
   build-kube-env true "${KUBE_TEMP}/master-kube-env.yaml"
 }
 
@@ -545,8 +546,8 @@ function kube-up {
   ensure-temp-dir
   detect-project
 
-  gen-kube-basicauth
-  gen-kube-bearertoken
+  load-or-gen-kube-basicauth
+  load-or-gen-kube-bearertoken
 
   # Make sure we have the tar files staged on Google Storage
   find-release-tars
@@ -653,7 +654,7 @@ function kube-up {
 
   echo "Creating minions."
 
-  # TODO(mbforbes): Refactor setting scope flags.
+  # TODO(zmerlynn): Refactor setting scope flags.
   local scope_flags=
   if [ -n "${MINION_SCOPES}" ]; then
     scope_flags="--scopes ${MINION_SCOPES}"
@@ -681,12 +682,20 @@ function kube-up {
   # Create autoscaler for nodes if requested
   if [[ "${ENABLE_NODE_AUTOSCALER}" == "true" ]]; then
     METRICS=""
+    # Current usage
     METRICS+="--custom-metric-utilization metric=custom.cloudmonitoring.googleapis.com/kubernetes.io/cpu/node_utilization,"
     METRICS+="utilization-target=${TARGET_NODE_UTILIZATION},utilization-target-type=GAUGE "
     METRICS+="--custom-metric-utilization metric=custom.cloudmonitoring.googleapis.com/kubernetes.io/memory/node_utilization,"
     METRICS+="utilization-target=${TARGET_NODE_UTILIZATION},utilization-target-type=GAUGE "
+
+    # Reservation
+    METRICS+="--custom-metric-utilization metric=custom.cloudmonitoring.googleapis.com/kubernetes.io/cpu/node_reservation,"
+    METRICS+="utilization-target=${TARGET_NODE_UTILIZATION},utilization-target-type=GAUGE "
+    METRICS+="--custom-metric-utilization metric=custom.cloudmonitoring.googleapis.com/kubernetes.io/memory/node_reservation,"
+    METRICS+="utilization-target=${TARGET_NODE_UTILIZATION},utilization-target-type=GAUGE "
+
     echo "Creating node autoscaler."
-    gcloud compute instance-groups managed set-autoscaling "${NODE_INSTANCE_PREFIX}-group" --zone "${ZONE}" --project $"{PROJECT}" \
+    gcloud compute instance-groups managed set-autoscaling "${NODE_INSTANCE_PREFIX}-group" --zone "${ZONE}" --project "${PROJECT}" \
         --min-num-replicas "${AUTOSCALER_MIN_NODES}" --max-num-replicas "${AUTOSCALER_MAX_NODES}" ${METRICS} || true
   fi
 
@@ -1015,7 +1024,7 @@ function prepare-push() {
   if [[ "${1-}" == "true" ]]; then
     write-node-env
 
-    # TODO(mbforbes): Refactor setting scope flags.
+    # TODO(zmerlynn): Refactor setting scope flags.
     local scope_flags=
     if [ -n "${MINION_SCOPES}" ]; then
       scope_flags="--scopes ${MINION_SCOPES}"
@@ -1206,4 +1215,33 @@ function restart-apiserver {
 # Perform preparations required to run e2e tests
 function prepare-e2e() {
   detect-project
+}
+
+# Builds the RUNTIME_CONFIG var from other feature enable options
+function build-runtime-config() {
+  if [[ "${ENABLE_EXPERIMENTAL_API}" == "true" ]]; then
+      if [[ -z "${RUNTIME_CONFIG}" ]]; then
+          RUNTIME_CONFIG="extensions/v1beta1=true"
+      else
+          # TODO: add checking if RUNTIME_CONFIG contains "extensions/v1beta1=false" and appending "extensions/v1beta1=true" if not.
+          if echo "${RUNTIME_CONFIG}" | grep -q -v "extensions/v1beta1=true"; then
+              echo "Experimental API should be turned on, but is not turned on in RUNTIME_CONFIG!" >&2
+              exit 1
+          fi
+      fi
+  fi
+  if [[ "${ENABLE_DEPLOYMENTS}" == "true" ]]; then
+      if [[ -z "${RUNTIME_CONFIG}" ]]; then
+          RUNTIME_CONFIG="extensions/v1beta1/deployments=true"
+      else
+          RUNTIME_CONFIG="${RUNTIME_CONFIG},extensions/v1beta1/deployments=true"
+      fi
+  fi
+  if [[ "${ENABLE_DAEMONSETS}" == "true" ]]; then
+      if [[ -z "${RUNTIME_CONFIG}" ]]; then
+          RUNTIME_CONFIG="extensions/v1beta1/daemonsets=true"
+      else
+          RUNTIME_CONFIG="${RUNTIME_CONFIG},extensions/v1beta1/daemonsets=true"
+      fi
+  fi
 }

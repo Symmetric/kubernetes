@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/user-guide/images.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -55,9 +27,9 @@ The `image` property of a container supports the same syntax as the `docker` com
 
 ## Updating Images
 
-The default pull policy is `PullIfNotPresent` which causes the Kubelet to not
+The default pull policy is `IfNotPresent` which causes the Kubelet to not
 pull an image if it already exists. If you would like to always force a pull
-you must set a pull image policy of `PullAlways` or specify a `:latest` tag on
+you must set a pull image policy of `Always` or specify a `:latest` tag on
 your image.
 
 ## Using a Private Registry
@@ -88,7 +60,7 @@ use the full image name (e.g. gcr.io/my_project/image:tag).
 
 All pods in a cluster will have read access to images in this registry.
 
-The kubelet kubelet will authenticate to GCR using the instance's
+The kubelet will authenticate to GCR using the instance's
 Google service account.  The service account on the instance
 will have a `https://www.googleapis.com/auth/devstorage.read_only`,
 so it can pull from the project's GCR, but not push.
@@ -126,8 +98,8 @@ spec:
   containers:
     - name: uses-private-image
       image: $PRIVATE_IMAGE_NAME
+      imagePullPolicy: Always
       command: [ "echo", "SUCCESS" ]
-  imagePullPolicy: Always
 EOF
 $ kubectl create -f /tmp/private-image-test-1.yaml
 pods/private-image-test-1
@@ -276,6 +248,13 @@ common use cases and suggested solutions.
      - DO NOT use imagePullSecrets for this use case yet.
   1. A multi-tenant cluster where each tenant needs own private registry
      - NOT supported yet.
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

@@ -1,40 +1,12 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/devel/kubectl-conventions.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
 Kubectl Conventions
 ===================
 
-Updated: 8/12/2015
+Updated: 8/27/2015
 
 **Table of Contents**
 <!-- BEGIN MUNGE: GENERATED_TOC -->
@@ -77,6 +49,31 @@ Updated: 8/12/2015
 * Flags are all lowercase, with words separated by hyphens
 * Flag names and single-character aliases should have the same meaning across all commands
 * Command-line flags corresponding to API fields should accept API enums exactly (e.g., --restart=Always)
+* Do not reuse flags for different semantic purposes, and do not use different flag names for the same semantic purpose -- grep for `"Flags()"` before adding a new flag
+* Use short flags sparingly, only for the most frequently used options, prefer lowercase over uppercase for the most common cases, try to stick to well known conventions for UNIX commands and/or Docker, where they exist, and update this list when adding new short flags
+  * `-f`: Resource file
+    * also used for `--follow` in `logs`, but should be deprecated in favor of `-F`
+  * `-l`: Label selector
+    * also used for `--labels` in `expose`, but should be deprecated
+  * `-L`: Label columns
+  * `-c`: Container
+    * also used for `--client` in `version`, but should be deprecated
+  * `-i`: Attach stdin
+  * `-t`: Allocate TTY
+    * also used for `--template`, but deprecated
+  * `-w`: Watch (currently also used for `--www` in `proxy`, but should be deprecated)
+  * `-p`: Previous
+    * also used for `--pod` in `exec`, but deprecated
+    * also used for `--patch` in `patch`, but should be deprecated
+    * also used for `--port` in `proxy`, but should be deprecated
+  * `-P`: Static file prefix in `proxy`, but should be deprecated
+  * `-r`: Replicas
+  * `-u`: Unix socket
+  * `-v`: Verbose logging level
+* `--dry-run`: Don't modify the live state; simulate the mutation and display the output
+* `--local`: Don't contact the server; just do local read, transformation, generation, etc. and display the output
+* `--output-version=...`: Convert the output to a different API group/version
+* `--validate`: Validate the resource schema
 
 ## Output conventions
 
@@ -109,6 +106,13 @@ Updated: 8/12/2015
 * Use "FILENAME" for filenames
 * Use "TYPE" for the particular flavor of resource type accepted by kubectl, rather than "RESOURCE" or "KIND"
 * Use "NAME" for resource names
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
+
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/docs/devel/kubectl-conventions.md?pixel)]()

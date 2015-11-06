@@ -42,7 +42,7 @@ MASTER_DISK_SIZE=${MASTER_DISK_SIZE:-20}
 # The master root EBS volume size (typically does not need to be very large)
 MASTER_ROOT_DISK_TYPE="${MASTER_ROOT_DISK_TYPE:-gp2}"
 MASTER_ROOT_DISK_SIZE=${MASTER_ROOT_DISK_SIZE:-8}
-# The minions root EBS volume size (used to house Docker images
+# The minions root EBS volume size (used to house Docker images)
 MINION_ROOT_DISK_TYPE="${MINION_ROOT_DISK_TYPE:-gp2}"
 MINION_ROOT_DISK_SIZE=${MINION_ROOT_DISK_SIZE:-32}
 
@@ -87,7 +87,7 @@ DNS_REPLICAS=1
 ENABLE_CLUSTER_UI="${KUBE_ENABLE_CLUSTER_UI:-true}"
 
 # Admission Controllers to invoke prior to persisting objects in cluster
-ADMISSION_CONTROL=NamespaceLifecycle,NamespaceExists,LimitRanger,SecurityContextDeny,ServiceAccount,ResourceQuota
+ADMISSION_CONTROL=NamespaceLifecycle,LimitRanger,SecurityContextDeny,ServiceAccount,ResourceQuota
 
 # Optional: Enable/disable public IP assignment for minions.
 # Important Note: disable only if you have setup a NAT instance for internet access and configured appropriate routes!

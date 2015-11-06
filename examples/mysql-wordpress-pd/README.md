@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/examples/mysql-wordpress-pd/README.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -131,7 +103,7 @@ spec:
         fsType: ext4
 ```
 
-[Download example](mysql.yaml)
+[Download example](mysql.yaml?raw=true)
 <!-- END MUNGE: EXAMPLE mysql.yaml -->
 
 Note that we've defined a volume mount for `/var/lib/mysql`, and specified a volume that uses the persistent disk (`mysql-disk`) that you created.
@@ -186,7 +158,7 @@ spec:
     name: mysql
 ```
 
-[Download example](mysql-service.yaml)
+[Download example](mysql-service.yaml?raw=true)
 <!-- END MUNGE: EXAMPLE mysql-service.yaml -->
 
 Start the service like this:
@@ -241,7 +213,7 @@ spec:
         fsType: ext4
 ```
 
-[Download example](wordpress.yaml)
+[Download example](wordpress.yaml?raw=true)
 <!-- END MUNGE: EXAMPLE wordpress.yaml -->
 
 Create the pod:
@@ -282,7 +254,7 @@ spec:
   type: LoadBalancer
 ```
 
-[Download example](wordpress-service.yaml)
+[Download example](wordpress-service.yaml?raw=true)
 <!-- END MUNGE: EXAMPLE wordpress-service.yaml -->
 
 Note the `type: LoadBalancer` setting.  This will set up the wordpress service behind an external IP.
@@ -355,6 +327,13 @@ If you are ready to turn down your Kubernetes cluster altogether, run:
 ```sh
 $ cluster/kube-down.sh
 ```
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

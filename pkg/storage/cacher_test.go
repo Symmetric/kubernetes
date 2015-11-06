@@ -27,6 +27,7 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/meta"
 	"k8s.io/kubernetes/pkg/api/testapi"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/runtime"
 	"k8s.io/kubernetes/pkg/storage"
@@ -34,6 +35,7 @@ import (
 	"k8s.io/kubernetes/pkg/tools"
 	"k8s.io/kubernetes/pkg/tools/etcdtest"
 	"k8s.io/kubernetes/pkg/util"
+	"k8s.io/kubernetes/pkg/util/sets"
 	"k8s.io/kubernetes/pkg/util/wait"
 	"k8s.io/kubernetes/pkg/watch"
 )
@@ -43,7 +45,7 @@ func newTestCacher(client tools.EtcdClient) *storage.Cacher {
 	config := storage.CacherConfig{
 		CacheCapacity:  10,
 		Versioner:      etcdstorage.APIObjectVersioner{},
-		Storage:        etcdstorage.NewEtcdStorage(client, testapi.Codec(), etcdtest.PathPrefix()),
+		Storage:        etcdstorage.NewEtcdStorage(client, testapi.Default.Codec(), etcdtest.PathPrefix()),
 		Type:           &api.Pod{},
 		ResourcePrefix: prefix,
 		KeyFunc:        func(obj runtime.Object) (string, error) { return storage.NamespaceKeyFunc(prefix, obj) },
@@ -94,7 +96,7 @@ func TestListFromMemory(t *testing.T) {
 		{
 			Action: "create",
 			Node: &etcd.Node{
-				Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
+				Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
 				CreatedIndex:  1,
 				ModifiedIndex: 1,
 			},
@@ -102,7 +104,7 @@ func TestListFromMemory(t *testing.T) {
 		{
 			Action: "create",
 			Node: &etcd.Node{
-				Value:         string(runtime.EncodeOrDie(testapi.Codec(), podBar)),
+				Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podBar)),
 				CreatedIndex:  2,
 				ModifiedIndex: 2,
 			},
@@ -110,7 +112,7 @@ func TestListFromMemory(t *testing.T) {
 		{
 			Action: "create",
 			Node: &etcd.Node{
-				Value:         string(runtime.EncodeOrDie(testapi.Codec(), podBaz)),
+				Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podBaz)),
 				CreatedIndex:  3,
 				ModifiedIndex: 3,
 			},
@@ -118,12 +120,12 @@ func TestListFromMemory(t *testing.T) {
 		{
 			Action: "set",
 			Node: &etcd.Node{
-				Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFooPrime)),
+				Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFooPrime)),
 				CreatedIndex:  1,
 				ModifiedIndex: 4,
 			},
 			PrevNode: &etcd.Node{
-				Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
+				Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
 				CreatedIndex:  1,
 				ModifiedIndex: 1,
 			},
@@ -135,7 +137,7 @@ func TestListFromMemory(t *testing.T) {
 				ModifiedIndex: 5,
 			},
 			PrevNode: &etcd.Node{
-				Value:         string(runtime.EncodeOrDie(testapi.Codec(), podBar)),
+				Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podBar)),
 				CreatedIndex:  1,
 				ModifiedIndex: 1,
 			},
@@ -160,7 +162,7 @@ func TestListFromMemory(t *testing.T) {
 	if len(result.Items) != 2 {
 		t.Errorf("unexpected list result: %d", len(result.Items))
 	}
-	keys := util.StringSet{}
+	keys := sets.String{}
 	for _, item := range result.Items {
 		keys.Insert(item.ObjectMeta.Name)
 	}
@@ -170,7 +172,7 @@ func TestListFromMemory(t *testing.T) {
 	for _, item := range result.Items {
 		// unset fields that are set by the infrastructure
 		item.ObjectMeta.ResourceVersion = ""
-		item.ObjectMeta.CreationTimestamp = util.Time{}
+		item.ObjectMeta.CreationTimestamp = unversioned.Time{}
 
 		var expected *api.Pod
 		switch item.ObjectMeta.Name {
@@ -210,9 +212,9 @@ func TestWatch(t *testing.T) {
 			etcdResponse: &etcd.Response{
 				Action: "create",
 				Node: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
-					CreatedIndex:  1,
-					ModifiedIndex: 1,
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
+					CreatedIndex:  2,
+					ModifiedIndex: 2,
 				},
 			},
 			event:    watch.Added,
@@ -223,9 +225,9 @@ func TestWatch(t *testing.T) {
 			etcdResponse: &etcd.Response{
 				Action: "create",
 				Node: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podBar)),
-					CreatedIndex:  2,
-					ModifiedIndex: 2,
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podBar)),
+					CreatedIndex:  3,
+					ModifiedIndex: 3,
 				},
 			},
 			event:    watch.Added,
@@ -236,14 +238,14 @@ func TestWatch(t *testing.T) {
 			etcdResponse: &etcd.Response{
 				Action: "set",
 				Node: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
-					CreatedIndex:  1,
-					ModifiedIndex: 3,
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
+					CreatedIndex:  2,
+					ModifiedIndex: 4,
 				},
 				PrevNode: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
-					CreatedIndex:  1,
-					ModifiedIndex: 1,
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
+					CreatedIndex:  2,
+					ModifiedIndex: 2,
 				},
 			},
 			event:    watch.Modified,
@@ -252,7 +254,7 @@ func TestWatch(t *testing.T) {
 	}
 
 	// Set up Watch for object "podFoo".
-	watcher, err := cacher.Watch("pods/ns/foo", 1, storage.Everything)
+	watcher, err := cacher.Watch("pods/ns/foo", 2, storage.Everything)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -267,7 +269,7 @@ func TestWatch(t *testing.T) {
 			// unset fields that are set by the infrastructure
 			obj := event.Object.(*api.Pod)
 			obj.ObjectMeta.ResourceVersion = ""
-			obj.ObjectMeta.CreationTimestamp = util.Time{}
+			obj.ObjectMeta.CreationTimestamp = unversioned.Time{}
 			if e, a := test.object, obj; !reflect.DeepEqual(e, a) {
 				t.Errorf("expected: %#v, got: %#v", e, a)
 			}
@@ -275,13 +277,13 @@ func TestWatch(t *testing.T) {
 	}
 
 	// Check whether we get too-old error.
-	_, err = cacher.Watch("pods/ns/foo", 0, storage.Everything)
+	_, err = cacher.Watch("pods/ns/foo", 1, storage.Everything)
 	if err == nil {
-		t.Errorf("expected 'error too old' error")
+		t.Errorf("exepcted 'error too old' error")
 	}
 
 	// Now test watch with initial state.
-	initialWatcher, err := cacher.Watch("pods/ns/foo", 1, storage.Everything)
+	initialWatcher, err := cacher.Watch("pods/ns/foo", 2, storage.Everything)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -294,11 +296,44 @@ func TestWatch(t *testing.T) {
 			// unset fields that are set by the infrastructure
 			obj := event.Object.(*api.Pod)
 			obj.ObjectMeta.ResourceVersion = ""
-			obj.ObjectMeta.CreationTimestamp = util.Time{}
+			obj.ObjectMeta.CreationTimestamp = unversioned.Time{}
 			if e, a := test.object, obj; !reflect.DeepEqual(e, a) {
 				t.Errorf("expected: %#v, got: %#v", e, a)
 			}
 		}
+	}
+
+	// Now test watch from "now".
+	nowWatcher, err := cacher.Watch("pods/ns/foo", 0, storage.Everything)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	select {
+	case event := <-nowWatcher.ResultChan():
+		if obj := event.Object.(*api.Pod); event.Type != watch.Added || obj.ResourceVersion != "4" {
+			t.Errorf("unexpected event: %v", event)
+		}
+	case <-time.After(time.Millisecond * 100):
+		t.Errorf("timed out waiting for an event")
+	}
+	// Emit a new event and check if it is observed by the watcher.
+	fakeClient.WatchResponse <- &etcd.Response{
+		Action: "set",
+		Node: &etcd.Node{
+			Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
+			CreatedIndex:  2,
+			ModifiedIndex: 5,
+		},
+		PrevNode: &etcd.Node{
+			Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
+			CreatedIndex:  2,
+			ModifiedIndex: 4,
+		},
+	}
+	event := <-nowWatcher.ResultChan()
+	obj := event.Object.(*api.Pod)
+	if event.Type != watch.Modified || obj.ResourceVersion != "5" {
+		t.Errorf("unexpected event: %v", event)
 	}
 
 	close(fakeClient.WatchResponse)
@@ -326,7 +361,7 @@ func TestFiltering(t *testing.T) {
 			etcdResponse: &etcd.Response{
 				Action: "create",
 				Node: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
 					CreatedIndex:  1,
 					ModifiedIndex: 1,
 				},
@@ -339,12 +374,12 @@ func TestFiltering(t *testing.T) {
 			etcdResponse: &etcd.Response{
 				Action: "set",
 				Node: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFooFiltered)),
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFooFiltered)),
 					CreatedIndex:  1,
 					ModifiedIndex: 2,
 				},
 				PrevNode: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
 					CreatedIndex:  1,
 					ModifiedIndex: 1,
 				},
@@ -358,12 +393,12 @@ func TestFiltering(t *testing.T) {
 			etcdResponse: &etcd.Response{
 				Action: "set",
 				Node: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
 					CreatedIndex:  1,
 					ModifiedIndex: 3,
 				},
 				PrevNode: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFooFiltered)),
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFooFiltered)),
 					CreatedIndex:  1,
 					ModifiedIndex: 2,
 				},
@@ -377,12 +412,12 @@ func TestFiltering(t *testing.T) {
 			etcdResponse: &etcd.Response{
 				Action: "set",
 				Node: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
 					CreatedIndex:  1,
 					ModifiedIndex: 4,
 				},
 				PrevNode: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
 					CreatedIndex:  1,
 					ModifiedIndex: 3,
 				},
@@ -399,7 +434,7 @@ func TestFiltering(t *testing.T) {
 					ModifiedIndex: 5,
 				},
 				PrevNode: &etcd.Node{
-					Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
+					Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
 					CreatedIndex:  1,
 					ModifiedIndex: 4,
 				},
@@ -434,7 +469,7 @@ func TestFiltering(t *testing.T) {
 			// unset fields that are set by the infrastructure
 			obj := event.Object.(*api.Pod)
 			obj.ObjectMeta.ResourceVersion = ""
-			obj.ObjectMeta.CreationTimestamp = util.Time{}
+			obj.ObjectMeta.CreationTimestamp = unversioned.Time{}
 			if e, a := test.object, obj; !reflect.DeepEqual(e, a) {
 				t.Errorf("expected: %#v, got: %#v", e, a)
 			}
@@ -462,7 +497,7 @@ func TestStorageError(t *testing.T) {
 	fakeClient.WatchResponse <- &etcd.Response{
 		Action: "create",
 		Node: &etcd.Node{
-			Value:         string(runtime.EncodeOrDie(testapi.Codec(), podFoo)),
+			Value:         string(runtime.EncodeOrDie(testapi.Default.Codec(), podFoo)),
 			CreatedIndex:  1,
 			ModifiedIndex: 1,
 		},

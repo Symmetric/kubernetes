@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/examples/celery-rabbitmq/README.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -81,7 +53,7 @@ spec:
     component: rabbitmq
 ```
 
-[Download example](rabbitmq-service.yaml)
+[Download example](rabbitmq-service.yaml?raw=true)
 <!-- END MUNGE: EXAMPLE rabbitmq-service.yaml -->
 
 To start the service, run:
@@ -126,7 +98,7 @@ spec:
             cpu: 100m
 ```
 
-[Download example](rabbitmq-controller.yaml)
+[Download example](rabbitmq-controller.yaml?raw=true)
 <!-- END MUNGE: EXAMPLE rabbitmq-controller.yaml -->
 
 Running `$ kubectl create -f examples/celery-rabbitmq/rabbitmq-controller.yaml` brings up a replication controller that ensures one pod exists which is running a RabbitMQ instance.
@@ -167,7 +139,7 @@ spec:
             cpu: 100m
 ```
 
-[Download example](celery-controller.yaml)
+[Download example](celery-controller.yaml?raw=true)
 <!-- END MUNGE: EXAMPLE celery-controller.yaml -->
 
 There are several things to point out here...
@@ -238,7 +210,7 @@ spec:
   type: LoadBalancer
 ```
 
-[Download example](flower-service.yaml)
+[Download example](flower-service.yaml?raw=true)
 <!-- END MUNGE: EXAMPLE flower-service.yaml -->
 
 It is marked as external (LoadBalanced). However on many platforms you will have to add an explicit firewall rule to open port 5555.
@@ -279,7 +251,7 @@ spec:
             cpu: 100m
 ```
 
-[Download example](flower-controller.yaml)
+[Download example](flower-controller.yaml?raw=true)
 <!-- END MUNGE: EXAMPLE flower-controller.yaml -->
 
 This will bring up a new pod with Flower installed and port 5555 (Flower's default port) exposed through the service endpoint. This image uses the following command to start Flower:
@@ -309,6 +281,13 @@ flower-service   name=flower   app=taskQueue,component=flower   10.0.44.166     
 
 Point your internet browser to the appropriate flower-service address, port 5555 (in our case http://162.222.181.180:5555).
 If you click on the tab called "Tasks", you should see an ever-growing list of tasks called "celery_conf.add" which the run\_tasks.py script is dispatching.
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

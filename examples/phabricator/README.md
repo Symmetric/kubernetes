@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/examples/phabricator/README.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -98,7 +70,7 @@ To start Phabricator server use the file [`examples/phabricator/phabricator-cont
 }
 ```
 
-[Download example](phabricator-controller.json)
+[Download example](phabricator-controller.json?raw=true)
 <!-- END MUNGE: EXAMPLE phabricator-controller.json -->
 
 Create the phabricator pod in your Kubernetes cluster by running:
@@ -188,7 +160,7 @@ To automate this process and make sure that a proper host is authorized even if 
 }
 ```
 
-[Download example](authenticator-controller.json)
+[Download example](authenticator-controller.json?raw=true)
 <!-- END MUNGE: EXAMPLE authenticator-controller.json -->
 
 To create the pod run:
@@ -237,7 +209,7 @@ Use the file [`examples/phabricator/phabricator-service.json`](phabricator-servi
 }
 ```
 
-[Download example](phabricator-service.json)
+[Download example](phabricator-service.json?raw=true)
 <!-- END MUNGE: EXAMPLE phabricator-service.json -->
 
 To create the service run:
@@ -270,6 +242,13 @@ To turn down a Kubernetes cluster:
 ```sh
 $ cluster/kube-down.sh
 ```
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

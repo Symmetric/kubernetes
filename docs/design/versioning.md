@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/design/versioning.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -44,9 +16,9 @@ Legend:
 
 * Kube 1.0.0, 1.0.1 -- DONE!
 * Kube 1.0.X (X>1): Standard operating procedure. We patch the release-1.0 branch as needed and increment the patch number.
-* Kube 1.1.0-alpha.X: Released roughly every two weeks by cutting from HEAD. No cherrypick releases. If there is a critical bugfix, a new release from HEAD can be created ahead of schedule. (This applies to the beta releases as well.)
-* Kube 1.1.0-beta.X: When HEAD is feature-complete, we go into code freeze 2 weeks prior to the desired 1.1.0 date and only merge PRs essential to 1.1. Releases continue to be cut from HEAD until we're essentially done.
-* Kube 1.1.0: Final release. Should occur between 3 and 4 months after 1.0.
+* Kube 1.1.0-alpha.X: Released roughly every two weeks by cutting from HEAD. No cherrypick releases. If there is a critical bugfix, a new release from HEAD can be created ahead of schedule.
+* Kube 1.1.0-beta: When HEAD is feature-complete, we will cut the release-1.1.0 branch 2 weeks prior to the desired 1.1.0 date and only merge PRs essential to 1.1.  This cut will be marked as 1.1.0-beta, and HEAD will be revved to 1.2.0-alpha.0.
+* Kube 1.1.0: Final release, cut from the release-1.1.0 branch cut two weeks prior. Should occur between 3 and 4 months after 1.0.  1.1.1-beta will be tagged at the same time on the same branch.
 
 ### Major version timeline
 
@@ -68,6 +40,14 @@ Here is an example major release cycle:
 
 It may seem a bit strange to complete the v2 API before v2.0 is released, but *adding* a v2 API is not a breaking change. *Removing* the v2beta\* APIs *is* a breaking change, which is what necessitates the major version bump. There are other ways to do this, but having the major release be the fresh start of that release's API without the baggage of its beta versions seems most intuitive out of the available options.
 
+# Patches
+
+Patch releases are intended for critical bug fixes to the latest minor version, such as addressing security vulnerabilities, fixes to problems affecting a large number of users, severe problems with no workaround, and blockers for products based on Kubernetes.
+
+They should not contain miscellaneous feature additions or improvements, and especially no incompatibilities should be introduced between patch versions of the same minor version (or even major version).
+
+Dependencies, such as Docker or Etcd, should also not be changed unless absolutely necessary, and also just to fix critical bugs (so, at most patch version changes, not new major nor minor versions).
+
 # Upgrades
 
 * Users can upgrade from any Kube 1.x release to any other Kube 1.x release as a rolling upgrade across their cluster. (Rolling upgrade means being able to upgrade the master first, then one node at a time. See #4855 for details.)
@@ -75,6 +55,13 @@ It may seem a bit strange to complete the v2 API before v2.0 is released, but *a
  * For example, if a user is at Kube 1.x, we may require them to upgrade to Kube 1.x+y before upgrading to Kube 2.x. In others words, an upgrade across major versions (e.g. Kube 1.x to Kube 2.x) should effectively be a no-op and as graceful as an upgrade from Kube 1.x to Kube 1.x+1. But you can require someone to go from 1.x to 1.x+y before they go to 2.x.
 
 There is a separate question of how to track the capabilities of a kubelet to facilitate rolling upgrades. That is not addressed here.
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

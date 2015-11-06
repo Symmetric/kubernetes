@@ -22,14 +22,15 @@ import (
 	"time"
 
 	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/client/cache"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/client/unversioned/cache"
 	controllerFramework "k8s.io/kubernetes/pkg/controller/framework"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/master/ports"
 	"k8s.io/kubernetes/pkg/runtime"
 	"k8s.io/kubernetes/pkg/util"
+	"k8s.io/kubernetes/pkg/util/sets"
 	"k8s.io/kubernetes/pkg/util/wait"
 	"k8s.io/kubernetes/pkg/watch"
 
@@ -131,7 +132,7 @@ func replacePods(pods []*api.Pod, store cache.Store) {
 	for i := range pods {
 		found = append(found, pods[i])
 	}
-	expectNoError(store.Replace(found))
+	expectNoError(store.Replace(found, "0"))
 }
 
 // getContainerRestarts returns the count of container restarts across all pods matching the given labelSelector,
@@ -140,7 +141,7 @@ func getContainerRestarts(c *client.Client, ns string, labelSelector labels.Sele
 	pods, err := c.Pods(ns).List(labelSelector, fields.Everything())
 	expectNoError(err)
 	failedContainers := 0
-	containerRestartNodes := util.NewStringSet()
+	containerRestartNodes := sets.NewString()
 	for _, p := range pods.Items {
 		for _, v := range FailedContainers(&p) {
 			failedContainers = failedContainers + v.restarts
@@ -165,11 +166,8 @@ var _ = Describe("DaemonRestart", func() {
 	BeforeEach(func() {
 
 		// These tests require SSH
-		// TODO: Enable on gke after testing (#11834)
-		if !providerIs("gce") {
-			By(fmt.Sprintf("Skipping test, which is not implemented for %s", testContext.Provider))
-			return
-		}
+		// TODO(11834): Enable this test in GKE once experimental API there is switched on
+		SkipUnlessProviderIs("gce")
 		framework.beforeEach()
 		ns = framework.Namespace.Name
 
@@ -224,8 +222,8 @@ var _ = Describe("DaemonRestart", func() {
 
 		// Only check the keys, the pods can be different if the kubelet updated it.
 		// TODO: Can it really?
-		existingKeys := util.NewStringSet()
-		newKeys := util.NewStringSet()
+		existingKeys := sets.NewString()
+		newKeys := sets.NewString()
 		for _, k := range existingPods.ListKeys() {
 			existingKeys.Insert(k)
 		}
@@ -255,7 +253,7 @@ var _ = Describe("DaemonRestart", func() {
 	})
 
 	It("Kubelet should not restart containers across restart", func() {
-		nodeIPs, err := getMinionPublicIps(framework.Client)
+		nodeIPs, err := getNodePublicIps(framework.Client)
 		expectNoError(err)
 		preRestarts, badNodes := getContainerRestarts(framework.Client, ns, labelSelector)
 		if preRestarts != 0 {

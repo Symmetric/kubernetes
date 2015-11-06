@@ -39,6 +39,8 @@ type Interface interface {
 	Routes() (Routes, bool)
 	// ProviderName returns the cloud provider ID.
 	ProviderName() string
+	// ScrubDNS provides an opportunity for cloud-provider-specific code to process DNS settings for pods.
+	ScrubDNS(nameservers, searches []string) (nsOut, srchOut []string)
 }
 
 // Clusters is an abstract, pluggable interface for clusters of containers.
@@ -81,7 +83,7 @@ type TCPLoadBalancer interface {
 	// if so, what its status is.
 	GetTCPLoadBalancer(name, region string) (status *api.LoadBalancerStatus, exists bool, err error)
 	// EnsureTCPLoadBalancer creates a new tcp load balancer, or updates an existing one. Returns the status of the balancer
-	EnsureTCPLoadBalancer(name, region string, externalIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error)
+	EnsureTCPLoadBalancer(name, region string, loadBalancerIP net.IP, ports []*api.ServicePort, hosts []string, affinityType api.ServiceAffinity) (*api.LoadBalancerStatus, error)
 	// UpdateTCPLoadBalancer updates hosts under the specified load balancer.
 	UpdateTCPLoadBalancer(name, region string, hosts []string) error
 	// EnsureTCPLoadBalancerDeleted deletes the specified load balancer if it

@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/devel/development.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -35,7 +7,7 @@ Documentation for other releases can be found at
 
 # Releases and Official Builds
 
-Official releases are built in Docker containers.  Details are [here](http://releases.k8s.io/HEAD/build/README.md).  You can do simple builds and development with just a local Docker installation.  If want to build go locally outside of docker, please continue below.
+Official releases are built in Docker containers.  Details are [here](http://releases.k8s.io/release-1.1/build/README.md).  You can do simple builds and development with just a local Docker installation.  If want to build go locally outside of docker, please continue below.
 
 ## Go development environment
 
@@ -96,7 +68,7 @@ git push -f origin myfeature
 
 ### Creating a pull request
 
-1. Visit http://github.com/$YOUR_GITHUB_USERNAME/kubernetes
+1. Visit https://github.com/$YOUR_GITHUB_USERNAME/kubernetes
 2. Click the "Compare and pull request" button next to your "myfeature" branch.
 3. Check out the pull request [process](pull-requests.md) for more details
 
@@ -111,6 +83,8 @@ pass tests independently, but it is worth striving for.  For mass automated
 fixups (e.g. automated doc formatting), use one or more commits for the
 changes to tooling and a final commit to apply the fixup en masse.  This makes
 reviews much easier.
+
+See [Faster Reviews](faster_reviews.md) for more details.
 
 ## godep and dependency management
 
@@ -145,6 +119,8 @@ Here's a quick walkthrough of one way to use godeps to add or update a Kubernete
 
 1) Devote a directory to this endeavor:
 
+_Devoting a separate directory is not required, but it is helpful to separate dependency updates from other changes._
+
 ```sh
 export KPATH=$HOME/code/kubernetes
 mkdir -p $KPATH/src/k8s.io/kubernetes
@@ -166,7 +142,7 @@ export GOPATH=$KPATH
 3) Populate your new GOPATH.
 
 ```sh
-cd $KPATH/src/github.com/kubernetes/kubernetes
+cd $KPATH/src/k8s.io/kubernetes
 godep restore
 ```
 
@@ -183,10 +159,17 @@ godep save ./...
 cd $KPATH/src/k8s.io/kubernetes
 go get -u path/to/dependency
 # Change code in Kubernetes accordingly if necessary.
-godep update path/to/dependency
+godep update path/to/dependency/...
 ```
 
-5) Before sending your PR, it's a good idea to sanity check that your Godeps.json file is ok by re-restoring: `godep restore`
+_If `go get -u path/to/dependency` fails with compilation errors, instead try `go get -d -u path/to/dependency`
+to fetch the dependencies without compiling them.  This can happen when updating the cadvisor dependency._
+
+
+5) Before sending your PR, it's a good idea to sanity check that your Godeps.json file is ok by running hack/verify-godeps.sh
+
+_If hack/verify-godeps.sh fails after a `godep update`, it is possible that a transitive dependency was added or removed but not
+updated by godeps.  It then may be necessary to perform a `godep save ./...` to pick up the transitive dependency changes._
 
 It is sometimes expedient to manually fix the /Godeps/godeps.json file to minimize the changes.
 
@@ -336,7 +319,7 @@ The conformance test runs a subset of the e2e-tests against a manually-created c
 require support for up/push/down and other operations.  To run a conformance test, you need to know the
 IP of the master for your cluster and the authorization arguments to use.  The conformance test is
 intended to run against a cluster at a specific binary release of Kubernetes.
-See [conformance-test.sh](http://releases.k8s.io/HEAD/hack/conformance-test.sh).
+See [conformance-test.sh](http://releases.k8s.io/release-1.1/hack/conformance-test.sh).
 
 ## Testing out flaky tests
 
@@ -347,6 +330,13 @@ See [conformance-test.sh](http://releases.k8s.io/HEAD/hack/conformance-test.sh).
 ```sh
 hack/update-generated-docs.sh
 ```
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

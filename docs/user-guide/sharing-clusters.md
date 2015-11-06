@@ -1,40 +1,12 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/user-guide/sharing-clusters.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
 # Sharing Cluster Access
 
 Client access to a running Kubernetes cluster can be shared by copying
-the `kubectl` client config bundle ([.kubeconfig](kubeconfig-file.md)).
+the `kubectl` client config bundle ([kubeconfig](kubeconfig-file.md)).
 This config bundle lives in `$HOME/.kube/config`, and is generated
 by `cluster/kube-up.sh`. Sample steps for sharing `kubeconfig` below.
 
@@ -64,7 +36,7 @@ $ mv /path/to/.kube/config $HOME/.kube/config
 $ mv /path/to/.kube/config $PWD
 ```
 
-* Option C: manually pass `kubeconfig` location to `.kubectl`
+* Option C: manually pass `kubeconfig` location to `kubectl`
 
 ```console
 # via environment variable
@@ -99,7 +71,7 @@ $ kubectl config set-credentials $USER_NICK \
     --client-certificate=/path/to/crt_file \
     --client-key=/path/to/key_file \
     --embed-certs=true \
-    --kubeconfig=/path/to/standalone/.kubeconfig
+    --kubeconfig=/path/to/standalone/.kube/config
 
 # create context entry
 $ kubectl config set-context $CONTEXT_NAME --cluster=$CLUSTER_NICKNAME --user=$USER_NICK
@@ -127,9 +99,9 @@ and/or run `kubectl config -h`.
 
 `kubectl` loads and merges config from the following locations (in order)
 
-1. `--kubeconfig=path/to/.kube/config` commandline flag
-2. `KUBECONFIG=path/to/.kube/config` env variable
-3. `$PWD/.kubeconfig`
+1. `--kubeconfig=/path/to/.kube/config` command line flag
+2. `KUBECONFIG=/path/to/.kube/config` env variable
+3. `$PWD/.kube/config`
 4. `$HOME/.kube/config`
 
 If you create clusters A, B on host1, and clusters C, D on host2, you can
@@ -137,17 +109,24 @@ make all four clusters available on both hosts by running
 
 ```console
 # on host2, copy host1's default kubeconfig, and merge it from env
-$ scp host1:/path/to/home1/.kube/config path/to/other/.kube/config
+$ scp host1:/path/to/home1/.kube/config /path/to/other/.kube/config
 
-$ export $KUBECONFIG=path/to/other/.kube/config
+$ export $KUBECONFIG=/path/to/other/.kube/config
 
 # on host1, copy host2's default kubeconfig and merge it from env
-$ scp host2:/path/to/home2/.kube/config path/to/other/.kube/config
+$ scp host2:/path/to/home2/.kube/config /path/to/other/.kube/config
 
-$ export $KUBECONFIG=path/to/other/.kube/config
+$ export $KUBECONFIG=/path/to/other/.kube/config
 ```
 
 Detailed examples and explanation of `kubeconfig` loading/merging rules can be found in [kubeconfig-file.md](kubeconfig-file.md).
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

@@ -20,13 +20,16 @@ import (
 	"crypto/md5"
 	"fmt"
 	"reflect"
+	"strings"
+	"time"
 
 	"k8s.io/kubernetes/pkg/api/resource"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/conversion"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/runtime"
-	"k8s.io/kubernetes/pkg/util"
+	"k8s.io/kubernetes/pkg/util/sets"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -65,7 +68,7 @@ var Semantic = conversion.EqualitiesOrDie(
 		}
 		return a.Amount.Cmp(b.Amount) == 0
 	},
-	func(a, b util.Time) bool {
+	func(a, b unversioned.Time) bool {
 		return a.UTC() == b.UTC()
 	},
 	func(a, b labels.Selector) bool {
@@ -76,14 +79,13 @@ var Semantic = conversion.EqualitiesOrDie(
 	},
 )
 
-var standardResources = util.NewStringSet(
+var standardResources = sets.NewString(
 	string(ResourceMemory),
 	string(ResourceCPU),
 	string(ResourcePods),
 	string(ResourceQuotas),
 	string(ResourceServices),
 	string(ResourceReplicationControllers),
-	string(ResourceDaemon),
 	string(ResourceSecrets),
 	string(ResourcePersistentVolumeClaims),
 	string(ResourceStorage))
@@ -111,7 +113,7 @@ func IsServiceIPRequested(service *Service) bool {
 	return service.Spec.ClusterIP == ""
 }
 
-var standardFinalizers = util.NewStringSet(
+var standardFinalizers = sets.NewString(
 	string(FinalizerKubernetes))
 
 func IsStandardFinalizerName(str string) bool {
@@ -178,4 +180,71 @@ func LoadBalancerStatusDeepCopy(lb *LoadBalancerStatus) *LoadBalancerStatus {
 		c.Ingress[i] = lb.Ingress[i]
 	}
 	return c
+}
+
+// GetAccessModesAsString returns a string representation of an array of access modes.
+// modes, when present, are always in the same order: RWO,ROX,RWX.
+func GetAccessModesAsString(modes []PersistentVolumeAccessMode) string {
+	modes = removeDuplicateAccessModes(modes)
+	modesStr := []string{}
+	if containsAccessMode(modes, ReadWriteOnce) {
+		modesStr = append(modesStr, "RWO")
+	}
+	if containsAccessMode(modes, ReadOnlyMany) {
+		modesStr = append(modesStr, "ROX")
+	}
+	if containsAccessMode(modes, ReadWriteMany) {
+		modesStr = append(modesStr, "RWX")
+	}
+	return strings.Join(modesStr, ",")
+}
+
+// GetAccessModesAsString returns an array of AccessModes from a string created by GetAccessModesAsString
+func GetAccessModesFromString(modes string) []PersistentVolumeAccessMode {
+	strmodes := strings.Split(modes, ",")
+	accessModes := []PersistentVolumeAccessMode{}
+	for _, s := range strmodes {
+		s = strings.Trim(s, " ")
+		switch {
+		case s == "RWO":
+			accessModes = append(accessModes, ReadWriteOnce)
+		case s == "ROX":
+			accessModes = append(accessModes, ReadOnlyMany)
+		case s == "RWX":
+			accessModes = append(accessModes, ReadWriteMany)
+		}
+	}
+	return accessModes
+}
+
+// removeDuplicateAccessModes returns an array of access modes without any duplicates
+func removeDuplicateAccessModes(modes []PersistentVolumeAccessMode) []PersistentVolumeAccessMode {
+	accessModes := []PersistentVolumeAccessMode{}
+	for _, m := range modes {
+		if !containsAccessMode(accessModes, m) {
+			accessModes = append(accessModes, m)
+		}
+	}
+	return accessModes
+}
+
+func containsAccessMode(modes []PersistentVolumeAccessMode, mode PersistentVolumeAccessMode) bool {
+	for _, m := range modes {
+		if m == mode {
+			return true
+		}
+	}
+	return false
+}
+
+// ParseRFC3339 parses an RFC3339 date in either RFC3339Nano or RFC3339 format.
+func ParseRFC3339(s string, nowFn func() unversioned.Time) (unversioned.Time, error) {
+	if t, timeErr := time.Parse(time.RFC3339Nano, s); timeErr == nil {
+		return unversioned.Time{t}, nil
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return unversioned.Time{}, err
+	}
+	return unversioned.Time{t}, nil
 }

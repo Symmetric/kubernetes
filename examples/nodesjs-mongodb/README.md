@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/examples/nodesjs-mongodb/README.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -74,7 +46,7 @@ kubectl create -f examples/nodesjs-mongodb/mongo-service.yaml
 
 ### Creating the MongoDB Controller
 
-Next, create the MongoDB instnace that runs the Database.  Databases also need persistant storage, which will be different for each platform.
+Next, create the MongoDB instance that runs the Database.  Databases also need persistent storage, which will be different for each platform.
 
 ```yaml
 apiVersion: v1
@@ -182,7 +154,7 @@ spec:
 
 This service is called "web," and it uses a [LoadBalancer](../../docs/user-guide/services.md#type-loadbalancer) to distribute traffic on port 80 to port 3000 running on Pods with the "web" tag. Port 80 is the standard HTTP port, and port 3000 is the standard Node.js port.
 
-On Google Container Engine, a [netowrk load balancer](https://cloud.google.com/compute/docs/load-balancing/network/) and [firewall rule](https://cloud.google.com/compute/docs/networking#addingafirewall) to allow traffic are automatically created.
+On Google Container Engine, a [network load balancer](https://cloud.google.com/compute/docs/load-balancing/network/) and [firewall rule](https://cloud.google.com/compute/docs/networking#addingafirewall) to allow traffic are automatically created.
 
 To start the service, run:
 
@@ -196,7 +168,7 @@ You may also need to open appropriate Firewall ports to allow traffic.
 
 ### Creating the Node.js Controller
 
-The final step is deplyoing the Node.js container that will run the application code. This container can easily by replaced by any other web serving frontend, such as Rails, LAMP, Java, Go, etc.
+The final step is deploying the Node.js container that will run the application code. This container can easily by replaced by any other web serving frontend, such as Rails, LAMP, Java, Go, etc.
 
 The most important thing to keep in mind is how to access the MongoDB service.
 
@@ -212,7 +184,7 @@ With this Kubernetes setup, that line of code would become:
 MongoClient.connect('mongodb://mongo:27017/database-name', function(err, db) { console.log(db); });
 ```
 
-The MongoDB Service previously created tells Kubernetes to configure the clutser so 'mongo' points to the MongoDB instance created earlier.
+The MongoDB Service previously created tells Kubernetes to configure the cluster so 'mongo' points to the MongoDB instance created earlier.
 
 #### Custom Container
 
@@ -292,7 +264,7 @@ spec:
 
 [Download file](web-controller-demo.yaml)
 
-This will use the default Node.js container, and will pull and execute code at run time. This is not reccomended; typically, your code should be part of the container.
+This will use the default Node.js container, and will pull and execute code at run time. This is not recommended; typically, your code should be part of the container.
 
 To start the Controller, run:
 
@@ -309,6 +281,13 @@ With Google Cloud Platform, get the IP address of all load balancers with the fo
 ```sh
 gcloud compute forwarding-rules list
 ```
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
+
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/examples/nodesjs-mongodb/README.md?pixel)]()

@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/devel/writing-a-getting-started-guide.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -76,7 +48,7 @@ These guidelines say *what* to do.  See the Rationale section for *why*.
 
 If you have a cluster partially working, but doing all the above steps seems like too much work,
 we still want to hear from you.  We suggest you write a blog post or a Gist, and we will link to it on our wiki page.
-Just file an issue or chat us on IRC and one of the committers will link to it from the wiki.
+Just file an issue or chat us on [Slack](../troubleshooting.md#slack) and one of the committers will link to it from the wiki.
 
 ## Development Distro Guidelines
 
@@ -127,6 +99,13 @@ These guidelines say *what* to do.  See the Rationale section for *why*.
    if you use another Configuration Management tool -- you just have to do some manual steps
    during testing and deployment.
 
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

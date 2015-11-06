@@ -26,10 +26,10 @@ import (
 
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/testapi"
+	"k8s.io/kubernetes/pkg/api/unversioned"
+	"k8s.io/kubernetes/pkg/client/cache"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/client/unversioned/cache"
 	"k8s.io/kubernetes/pkg/runtime"
-	kutil "k8s.io/kubernetes/pkg/util"
 	"k8s.io/kubernetes/pkg/watch"
 
 	log "github.com/golang/glog"
@@ -61,13 +61,13 @@ func NewTestServer(t *testing.T, namespace string, mockPodListWatch *MockPodsLis
 	}
 	mux := http.NewServeMux()
 
-	mux.HandleFunc(testapi.ResourcePath("pods", namespace, ""), func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(testapi.Default.ResourcePath("pods", namespace, ""), func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		pods := mockPodListWatch.Pods()
-		w.Write([]byte(runtime.EncodeOrDie(testapi.Codec(), &pods)))
+		w.Write([]byte(runtime.EncodeOrDie(testapi.Default.Codec(), &pods)))
 	})
 
-	podsPrefix := testapi.ResourcePath("pods", namespace, "") + "/"
+	podsPrefix := testapi.Default.ResourcePath("pods", namespace, "") + "/"
 	mux.HandleFunc(podsPrefix, func(w http.ResponseWriter, r *http.Request) {
 		name := r.URL.Path[len(podsPrefix):]
 
@@ -79,13 +79,13 @@ func NewTestServer(t *testing.T, namespace string, mockPodListWatch *MockPodsLis
 		p := mockPodListWatch.GetPod(name)
 		if p != nil {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(runtime.EncodeOrDie(testapi.Codec(), p)))
+			w.Write([]byte(runtime.EncodeOrDie(testapi.Default.Codec(), p)))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
 	})
 
-	mux.HandleFunc(testapi.ResourcePath("events", namespace, ""), func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(testapi.Default.ResourcePath("events", namespace, ""), func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -196,7 +196,7 @@ func NewTestPod() (*api.Pod, int) {
 	currentPodNum = currentPodNum + 1
 	name := fmt.Sprintf("pod%d", currentPodNum)
 	return &api.Pod{
-		TypeMeta: api.TypeMeta{APIVersion: testapi.Version()},
+		TypeMeta: unversioned.TypeMeta{APIVersion: testapi.Default.Version()},
 		ObjectMeta: api.ObjectMeta{
 			Name:      name,
 			Namespace: api.NamespaceDefault,
@@ -272,7 +272,7 @@ func (o *EventObserver) Event(object runtime.Object, reason, message string) {
 func (o *EventObserver) Eventf(object runtime.Object, reason, messageFmt string, args ...interface{}) {
 	o.fifo <- Event{Object: object, Reason: reason, Message: fmt.Sprintf(messageFmt, args...)}
 }
-func (o *EventObserver) PastEventf(object runtime.Object, timestamp kutil.Time, reason, messageFmt string, args ...interface{}) {
+func (o *EventObserver) PastEventf(object runtime.Object, timestamp unversioned.Time, reason, messageFmt string, args ...interface{}) {
 	o.fifo <- Event{Object: object, Reason: reason, Message: fmt.Sprintf(messageFmt, args...)}
 }
 
@@ -393,13 +393,14 @@ func TestPlugin_LifeCycle(t *testing.T) {
 	executor.Data = []byte{0, 1, 2}
 
 	// create scheduler
+	as := NewAllocationStrategy(
+		podtask.DefaultPredicate,
+		podtask.NewDefaultProcurement(mresource.DefaultDefaultContainerCPULimit, mresource.DefaultDefaultContainerMemLimit))
 	testScheduler := New(Config{
-		Executor:                 executor,
-		Client:                   client.NewOrDie(&client.Config{Host: testApiServer.server.URL, Version: testapi.Version()}),
-		ScheduleFunc:             FCFSScheduleFunc,
-		Schedcfg:                 *schedcfg.CreateDefaultConfig(),
-		DefaultContainerCPULimit: mresource.DefaultDefaultContainerCPULimit,
-		DefaultContainerMemLimit: mresource.DefaultDefaultContainerMemLimit,
+		Executor:  executor,
+		Client:    client.NewOrDie(&client.Config{Host: testApiServer.server.URL, Version: testapi.Default.Version()}),
+		Scheduler: NewFCFSPodScheduler(as),
+		Schedcfg:  *schedcfg.CreateDefaultConfig(),
 	})
 
 	assert.NotNil(testScheduler.client, "client is nil")

@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/admin/namespaces.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -122,7 +94,7 @@ See [Admission control: Limit Range](../design/admission_control_limit_range.md)
 
 A namespace can be in one of two phases:
    * `Active` the namespace is in use
-   * ```Terminating`` the namespace is being deleted, and can not be used for new objects
+   * `Terminating` the namespace is being deleted, and can not be used for new objects
 
 See the [design doc](../design/namespaces.md#phases) for more details.
 
@@ -166,8 +138,8 @@ This delete is asynchronous, so for a time you will see the namespace in the `Te
 
 ## Namespaces and DNS
 
-When you create a [Service](../../docs/user-guide/services.md), it creates a corresponding [DNS entry](dns.md)1.
-This entry is of the form `<service-name>.<namespace-name>.cluster.local`, which means
+When you create a [Service](../../docs/user-guide/services.md), it creates a corresponding [DNS entry](dns.md).
+This entry is of the form `<service-name>.<namespace-name>.svc.cluster.local`, which means
 that if a container just uses `<service-name>` it will resolve to the service which
 is local to a namespace.  This is useful for using the same configuration across
 multiple namespaces such as Development, Staging and Production.  If you want to reach
@@ -177,6 +149,13 @@ across namespaces, you need to use the fully qualified domain name (FQDN).
 
 Details of the design of namespaces in Kubernetes, including a [detailed example](../design/namespaces.md#example-openshift-origin-managing-a-kubernetes-namespace)
 can be found in the [namespaces design doc](../design/namespaces.md)
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

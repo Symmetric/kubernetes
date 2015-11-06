@@ -24,13 +24,25 @@ import (
 	"k8s.io/kubernetes/pkg/conversion"
 )
 
+const (
+	// Annotation key used to identify mirror pods.
+	mirrorAnnotationKey = "kubernetes.io/config.mirror"
+
+	// Value used to identify mirror pods from pre-v1.1 kubelet.
+	mirrorAnnotationValue_1_0 = "mirror"
+)
+
 func addConversionFuncs() {
 	// Add non-generated conversion functions
 	err := api.Scheme.AddConversionFuncs(
+		convert_api_Pod_To_v1_Pod,
 		convert_api_PodSpec_To_v1_PodSpec,
 		convert_api_ReplicationControllerSpec_To_v1_ReplicationControllerSpec,
+		convert_api_ServiceSpec_To_v1_ServiceSpec,
+		convert_v1_Pod_To_api_Pod,
 		convert_v1_PodSpec_To_api_PodSpec,
 		convert_v1_ReplicationControllerSpec_To_api_ReplicationControllerSpec,
+		convert_v1_ServiceSpec_To_api_ServiceSpec,
 	)
 	if err != nil {
 		// If one of the conversion functions is malformed, detect it immediately.
@@ -43,6 +55,8 @@ func addConversionFuncs() {
 			switch label {
 			case "metadata.name",
 				"metadata.namespace",
+				"metadata.labels",
+				"metadata.annotations",
 				"status.phase",
 				"status.podIP",
 				"spec.nodeName":
@@ -280,6 +294,8 @@ func convert_api_PodSpec_To_v1_PodSpec(in *api.PodSpec, out *PodSpec, s conversi
 	out.DeprecatedServiceAccount = in.ServiceAccountName
 	out.NodeName = in.NodeName
 	out.HostNetwork = in.HostNetwork
+	out.HostPID = in.HostPID
+	out.HostIPC = in.HostIPC
 	if in.ImagePullSecrets != nil {
 		out.ImagePullSecrets = make([]LocalObjectReference, len(in.ImagePullSecrets))
 		for i := range in.ImagePullSecrets {
@@ -347,6 +363,8 @@ func convert_v1_PodSpec_To_api_PodSpec(in *PodSpec, out *api.PodSpec, s conversi
 	}
 	out.NodeName = in.NodeName
 	out.HostNetwork = in.HostNetwork
+	out.HostPID = in.HostPID
+	out.HostIPC = in.HostIPC
 	if in.ImagePullSecrets != nil {
 		out.ImagePullSecrets = make([]api.LocalObjectReference, len(in.ImagePullSecrets))
 		for i := range in.ImagePullSecrets {
@@ -356,6 +374,54 @@ func convert_v1_PodSpec_To_api_PodSpec(in *PodSpec, out *api.PodSpec, s conversi
 		}
 	} else {
 		out.ImagePullSecrets = nil
+	}
+
+	return nil
+}
+
+func convert_api_Pod_To_v1_Pod(in *api.Pod, out *Pod, s conversion.Scope) error {
+	if err := autoconvert_api_Pod_To_v1_Pod(in, out, s); err != nil {
+		return err
+	}
+	// We need to reset certain fields for mirror pods from pre-v1.1 kubelet
+	// (#15960).
+	// TODO: Remove this code after we drop support for v1.0 kubelets.
+	if value, ok := in.Annotations[mirrorAnnotationKey]; ok && value == mirrorAnnotationValue_1_0 {
+		// Reset the TerminationGracePeriodSeconds.
+		out.Spec.TerminationGracePeriodSeconds = nil
+		// Reset the resource requests.
+		for i := range out.Spec.Containers {
+			out.Spec.Containers[i].Resources.Requests = nil
+		}
+	}
+	return nil
+}
+
+func convert_v1_Pod_To_api_Pod(in *Pod, out *api.Pod, s conversion.Scope) error {
+	return autoconvert_v1_Pod_To_api_Pod(in, out, s)
+}
+
+func convert_api_ServiceSpec_To_v1_ServiceSpec(in *api.ServiceSpec, out *ServiceSpec, s conversion.Scope) error {
+	if err := autoconvert_api_ServiceSpec_To_v1_ServiceSpec(in, out, s); err != nil {
+		return err
+	}
+	// Publish both externalIPs and deprecatedPublicIPs fields in v1.
+	for _, ip := range in.ExternalIPs {
+		out.DeprecatedPublicIPs = append(out.DeprecatedPublicIPs, ip)
+	}
+	return nil
+}
+
+func convert_v1_ServiceSpec_To_api_ServiceSpec(in *ServiceSpec, out *api.ServiceSpec, s conversion.Scope) error {
+	if err := autoconvert_v1_ServiceSpec_To_api_ServiceSpec(in, out, s); err != nil {
+		return err
+	}
+	// Prefer the legacy deprecatedPublicIPs field, if provided.
+	if len(in.DeprecatedPublicIPs) > 0 {
+		out.ExternalIPs = nil
+		for _, ip := range in.DeprecatedPublicIPs {
+			out.ExternalIPs = append(out.ExternalIPs, ip)
+		}
 	}
 	return nil
 }

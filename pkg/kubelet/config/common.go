@@ -64,6 +64,12 @@ func applyDefaults(pod *api.Pod, source string, isFile bool, nodeName string) er
 	pod.Spec.NodeName = nodeName
 
 	pod.ObjectMeta.SelfLink = getSelfLink(pod.Name, pod.Namespace)
+
+	if pod.Annotations == nil {
+		pod.Annotations = make(map[string]string)
+	}
+	// The generated UID is the hash of the file.
+	pod.Annotations[kubelet.ConfigHashAnnotationKey] = string(pod.UID)
 	return nil
 }
 
@@ -72,7 +78,7 @@ func getSelfLink(name, namespace string) string {
 	if len(namespace) == 0 {
 		namespace = api.NamespaceDefault
 	}
-	selfLink = fmt.Sprintf("/api/"+latest.Version+"/pods/namespaces/%s/%s", name, namespace)
+	selfLink = fmt.Sprintf("/api/"+latest.GroupOrDie("").Version+"/pods/namespaces/%s/%s", name, namespace)
 	return selfLink
 }
 

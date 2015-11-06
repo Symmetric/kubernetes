@@ -25,17 +25,17 @@ import (
 	cadvisorApiV2 "github.com/google/cadvisor/info/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/kubernetes/pkg/client/unversioned/record"
+	"k8s.io/kubernetes/pkg/client/record"
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
 	"k8s.io/kubernetes/pkg/kubelet/dockertools"
-	"k8s.io/kubernetes/pkg/util"
+	"k8s.io/kubernetes/pkg/util/sets"
 )
 
 var zero time.Time
 
 func newRealImageManager(policy ImageGCPolicy) (*realImageManager, *dockertools.FakeDockerClient, *cadvisor.Mock) {
 	fakeDocker := &dockertools.FakeDockerClient{
-		RemovedImages: util.NewStringSet(),
+		RemovedImages: sets.NewString(),
 	}
 	mockCadvisor := new(cadvisor.Mock)
 	return &realImageManager{

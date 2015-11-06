@@ -44,8 +44,13 @@ func (c *FakePods) List(label labels.Selector, field fields.Selector) (*api.PodL
 	if obj == nil {
 		return nil, err
 	}
-
-	return obj.(*api.PodList), err
+	list := &api.PodList{}
+	for _, pod := range obj.(*api.PodList).Items {
+		if label.Matches(labels.Set(pod.Labels)) {
+			list.Items = append(list.Items, pod)
+		}
+	}
+	return list, err
 }
 
 func (c *FakePods) Create(pod *api.Pod) (*api.Pod, error) {
@@ -72,8 +77,7 @@ func (c *FakePods) Delete(name string, options *api.DeleteOptions) error {
 }
 
 func (c *FakePods) Watch(label labels.Selector, field fields.Selector, resourceVersion string) (watch.Interface, error) {
-	c.Fake.Invokes(NewWatchAction("pods", c.Namespace, label, field, resourceVersion), nil)
-	return c.Fake.Watch, c.Fake.Err()
+	return c.Fake.InvokesWatch(NewWatchAction("pods", c.Namespace, label, field, resourceVersion))
 }
 
 func (c *FakePods) Bind(binding *api.Binding) error {
@@ -88,13 +92,7 @@ func (c *FakePods) Bind(binding *api.Binding) error {
 }
 
 func (c *FakePods) UpdateStatus(pod *api.Pod) (*api.Pod, error) {
-	action := UpdateActionImpl{}
-	action.Verb = "update"
-	action.Resource = "pods"
-	action.Subresource = "status"
-	action.Object = pod
-
-	obj, err := c.Fake.Invokes(action, pod)
+	obj, err := c.Fake.Invokes(NewUpdateSubresourceAction("pods", "status", c.Namespace, pod), pod)
 	if obj == nil {
 		return nil, err
 	}

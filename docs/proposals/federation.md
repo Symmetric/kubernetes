@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/proposals/federation.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -237,10 +209,10 @@ It seems useful to split this into multiple sets of sub use cases:
    which feature sets like private networks, load balancing,
    persistent disks, data snapshots etc are typically consistent and
    explicitly designed to inter-operate).
-   1.1. within the same geographical region (e.g. metro) within which network
+   1. within the same geographical region (e.g. metro) within which network
    is fast and cheap enough to be almost analogous to a single data
    center.
-   1.1. across multiple geographical regions, where high network cost and
+   1. across multiple geographical regions, where high network cost and
    poor network performance may be prohibitive.
 1. Multiple cloud providers (typically with inconsistent feature sets,
    more limited interoperability, and typically no cheap inter-cluster
@@ -440,12 +412,13 @@ to be able to:
 
 There is of course a lot of detail still missing from this section,
 including discussion of:
-1. admission control,
+
+1. admission control
 1. initial placement of instances of a new
 service vs scheduling new instances of an existing service in response
-to auto-scaling,
+to auto-scaling
 1. rescheduling pods due to failure (response might be
-different depending on if it's failure of a node, rack, or whole AZ),
+different depending on if it's failure of a node, rack, or whole AZ)
 1. data placement relative to compute capacity,
 etc.
 
@@ -671,6 +644,13 @@ does each replica find the other replicas and how do clients find
 their primary zookeeper replica? And now how do I do a shared, highly
 available redis database?  Use a few common specific use cases like
 this to flesh out the detailed API and semantics of Ubernetes.
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

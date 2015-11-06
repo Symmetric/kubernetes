@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/getting-started-guides/coreos/coreos_multinode_cluster.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -161,7 +133,7 @@ nova list
 
 #### Get a Suitable CoreOS Image
 
-You'll need a [suitable version of CoreOS image for OpenStack] (https://coreos.com/os/docs/latest/booting-on-openstack.html)
+You'll need a [suitable version of CoreOS image for OpenStack](https://coreos.com/os/docs/latest/booting-on-openstack.html)
 Once you download that, upload it to glance.  An example is shown below:
 
 ```sh
@@ -229,37 +201,11 @@ minion01
 
 This is basically the same as the master nodes but with the node.yaml post-boot script instead of the master.
 
-### VMware Fusion
 
-#### Create the master config-drive
 
-```sh
-mkdir -p /tmp/new-drive/openstack/latest/
-cp master.yaml /tmp/new-drive/openstack/latest/user_data
-hdiutil makehybrid -iso -joliet -joliet-volume-name "config-2" -joliet -o master.iso /tmp/new-drive
-```
-
-#### Provision the Master
-
-Boot the [vmware image](https://coreos.com/docs/running-coreos/platforms/vmware) using `master.iso` as a config drive.
-
-#### Capture the master private IP address
-
-#### Edit node.yaml
-
-Edit `node.yaml` and replace all instances of `<master-private-ip>` with the private IP address of the master node.
-
-#### Create the node config-drive
-
-```sh
-mkdir -p /tmp/new-drive/openstack/latest/
-cp node.yaml /tmp/new-drive/openstack/latest/user_data
-hdiutil makehybrid -iso -joliet -joliet-volume-name "config-2" -joliet -o node.iso /tmp/new-drive
-```
-
-#### Provision worker nodes
-
-Boot one or more the [vmware image](https://coreos.com/docs/running-coreos/platforms/vmware) using `node.iso` as a config drive.
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

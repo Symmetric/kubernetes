@@ -22,6 +22,7 @@ import (
 
 	"k8s.io/kubernetes/pkg/api"
 	"k8s.io/kubernetes/pkg/api/resource"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/labels"
@@ -109,6 +110,22 @@ func verifyResult(c *client.Client, podName string, ns string, oldNotRunning int
 			"reason":                   "FailedScheduling",
 		}.AsSelector())
 	expectNoError(err)
+	// If we failed to find event with a capitalized first letter of reason
+	// try looking for one starting with a small one for backward compatibility.
+	// If we don't do it we end up in #15806.
+	// TODO: remove this block when we don't care about supporting v1.0 too much.
+	if len(schedEvents.Items) == 0 {
+		schedEvents, err = c.Events(ns).List(
+			labels.Everything(),
+			fields.Set{
+				"involvedObject.kind":      "Pod",
+				"involvedObject.name":      podName,
+				"involvedObject.namespace": ns,
+				"source":                   "scheduler",
+				"reason":                   "failedScheduling",
+			}.AsSelector())
+		expectNoError(err)
+	}
 
 	printed := false
 	printOnce := func(msg string) string {
@@ -152,7 +169,7 @@ var _ = Describe("SchedulerPredicates", func() {
 		nodeCount = len(nodeList.Items)
 		Expect(nodeCount).NotTo(BeZero())
 
-		err = deleteTestingNS(c)
+		err = checkTestingNSDeletedExcept(c, "")
 		expectNoError(err)
 
 		nsForTesting, err := createTestingNS("sched-pred", c)
@@ -170,7 +187,7 @@ var _ = Describe("SchedulerPredicates", func() {
 		}
 
 		By(fmt.Sprintf("Destroying namespace for this suite %v", ns))
-		if err := deleteNS(c, ns); err != nil {
+		if err := deleteNS(c, ns, 10*time.Minute /* namespace deletion timeout */); err != nil {
 			Failf("Couldn't delete ns %s", err)
 		}
 	})
@@ -178,7 +195,7 @@ var _ = Describe("SchedulerPredicates", func() {
 	// This test verifies that max-pods flag works as advertised. It assumes that cluster add-on pods stay stable
 	// and cannot be run in parallel with any other test that touches Nodes or Pods. It is so because to check
 	// if max-pods is working we need to fully saturate the cluster and keep it in this state for few seconds.
-	It("validates MaxPods limit number of pods that are allowed to run.", func() {
+	It("validates MaxPods limit number of pods that are allowed to run", func() {
 		totalPodCapacity = 0
 
 		for _, node := range nodeList.Items {
@@ -196,7 +213,7 @@ var _ = Describe("SchedulerPredicates", func() {
 		By(fmt.Sprintf("Starting additional %v Pods to fully saturate the cluster max pods and trying to start another one", podsNeededForSaturation))
 
 		startPods(c, podsNeededForSaturation, ns, "maxp", api.Pod{
-			TypeMeta: api.TypeMeta{
+			TypeMeta: unversioned.TypeMeta{
 				Kind: "Pod",
 			},
 			ObjectMeta: api.ObjectMeta{
@@ -215,7 +232,7 @@ var _ = Describe("SchedulerPredicates", func() {
 
 		podName := "additional-pod"
 		_, err = c.Pods(ns).Create(&api.Pod{
-			TypeMeta: api.TypeMeta{
+			TypeMeta: unversioned.TypeMeta{
 				Kind: "Pod",
 			},
 			ObjectMeta: api.ObjectMeta{
@@ -241,10 +258,10 @@ var _ = Describe("SchedulerPredicates", func() {
 		cleanupPods(c, ns)
 	})
 
-	// This test verifies we don't allow scheduling of pods in a way that sum of limits of pods is greater than machines capacit.
+	// This test verifies we don't allow scheduling of pods in a way that sum of limits of pods is greater than machines capacity.
 	// It assumes that cluster add-on pods stay stable and cannot be run in parallel with any other test that touches Nodes or Pods.
 	// It is so because we need to have precise control on what's running in the cluster.
-	It("validates resource limits of pods that are allowed to run.", func() {
+	It("validates resource limits of pods that are allowed to run [Conformance]", func() {
 		nodeToCapacityMap := make(map[string]int64)
 		for _, node := range nodeList.Items {
 			capacity, found := node.Status.Capacity["cpu"]
@@ -267,15 +284,16 @@ var _ = Describe("SchedulerPredicates", func() {
 		}
 
 		var podsNeededForSaturation int
+		milliCpuPerPod := int64(500)
 		for name, leftCapacity := range nodeToCapacityMap {
 			Logf("Node: %v has capacity: %v", name, leftCapacity)
-			podsNeededForSaturation += (int)(leftCapacity / 100)
+			podsNeededForSaturation += (int)(leftCapacity / milliCpuPerPod)
 		}
 
 		By(fmt.Sprintf("Starting additional %v Pods to fully saturate the cluster CPU and trying to start another one", podsNeededForSaturation))
 
 		startPods(c, podsNeededForSaturation, ns, "overcommit", api.Pod{
-			TypeMeta: api.TypeMeta{
+			TypeMeta: unversioned.TypeMeta{
 				Kind: "Pod",
 			},
 			ObjectMeta: api.ObjectMeta{
@@ -289,7 +307,7 @@ var _ = Describe("SchedulerPredicates", func() {
 						Image: "gcr.io/google_containers/pause:go",
 						Resources: api.ResourceRequirements{
 							Limits: api.ResourceList{
-								"cpu": *resource.NewMilliQuantity(100, "DecimalSI"),
+								"cpu": *resource.NewMilliQuantity(milliCpuPerPod, "DecimalSI"),
 							},
 						},
 					},
@@ -299,7 +317,7 @@ var _ = Describe("SchedulerPredicates", func() {
 
 		podName := "additional-pod"
 		_, err = c.Pods(ns).Create(&api.Pod{
-			TypeMeta: api.TypeMeta{
+			TypeMeta: unversioned.TypeMeta{
 				Kind: "Pod",
 			},
 			ObjectMeta: api.ObjectMeta{
@@ -313,7 +331,7 @@ var _ = Describe("SchedulerPredicates", func() {
 						Image: "gcr.io/google_containers/pause:go",
 						Resources: api.ResourceRequirements{
 							Limits: api.ResourceList{
-								"cpu": *resource.NewMilliQuantity(100, "DecimalSI"),
+								"cpu": *resource.NewMilliQuantity(milliCpuPerPod, "DecimalSI"),
 							},
 						},
 					},
@@ -332,7 +350,7 @@ var _ = Describe("SchedulerPredicates", func() {
 
 	// Test Nodes does not have any label, hence it should be impossible to schedule Pod with
 	// nonempty Selector set.
-	It("validates that NodeSelector is respected.", func() {
+	It("validates that NodeSelector is respected [Conformance]", func() {
 		By("Trying to schedule Pod with nonempty NodeSelector.")
 		podName := "restricted-pod"
 
@@ -341,7 +359,7 @@ var _ = Describe("SchedulerPredicates", func() {
 		_, currentlyDeadPods := getPodsNumbers(allPods)
 
 		_, err = c.Pods(ns).Create(&api.Pod{
-			TypeMeta: api.TypeMeta{
+			TypeMeta: unversioned.TypeMeta{
 				Kind: "Pod",
 			},
 			ObjectMeta: api.ObjectMeta{

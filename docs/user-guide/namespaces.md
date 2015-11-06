@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/user-guide/namespaces.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -45,7 +17,7 @@ need the features they provide.
 
 Namespaces provide a scope for names.  Names of resources need to be unique within a namespace, but not across namespaces.
 
-Namespaces are a way to divide cluster resources between multiple uses (via [resource quota])(../../docs/admin/resource-quota.md).
+Namespaces are a way to divide cluster resources between multiple uses (via [resource quota](../../docs/admin/resource-quota.md)).
 
 In future versions of Kubernetes, objects in the same namespace will have the same
 access control policies by default.
@@ -57,7 +29,7 @@ resources within the same namespace.
 ## Working with Namespaces
 
 Creation and deletion of namespaces is described in the [Admin Guide documentation
-for namespaces](#../../docs/admin/namespaces.md)
+for namespaces](../../docs/admin/namespaces.md)
 
 ### Viewing namespaces
 
@@ -104,8 +76,8 @@ $ kubectl config set-context $(CONTEXT) --namespace=<insert-namespace-name-here>
 
 ## Namespaces and DNS
 
-When you create a [Service](services.md), it creates a corresponding [DNS entry](../admin/dns.md)1.
-This entry is of the form `<service-name>.<namespace-name>.cluster.local`, which means
+When you create a [Service](services.md), it creates a corresponding [DNS entry](../admin/dns.md).
+This entry is of the form `<service-name>.<namespace-name>.svc.cluster.local`, which means
 that if a container just uses `<service-name>` it will resolve to the service which
 is local to a namespace.  This is useful for using the same configuration across
 multiple namespaces such as Development, Staging and Production.  If you want to reach
@@ -118,6 +90,13 @@ in a some namespace.  However namespace resources are not themselves in a namesp
 And, low-level resources, such as [nodes](../../docs/admin/node.md) and
 persistentVolumes, are not in any namespace. Events are an exception: they may or may not
 have a namespace, depending on the object the event is about.
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

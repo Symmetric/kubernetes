@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/getting-started-guides/rackspace.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 Getting started on Rackspace
@@ -79,6 +51,7 @@ The current cluster design is inspired by:
 ## Cluster
 
 There is a specific `cluster/rackspace` directory with the scripts for the following steps:
+
 1. A cloud network will be created and all instances will be attached to this network.
   - flanneld uses this network for next hop routing. These routes allow the containers running on each node to communicate with one another on this private network.
 2. A SSH key will be created and uploaded if needed. This key must be used to ssh into the machines (we do not capture the password).
@@ -91,15 +64,22 @@ There is a specific `cluster/rackspace` directory with the scripts for the follo
 - A number of the items in `config-default.sh` are overridable via environment variables.
 - For older versions please either:
  * Sync back to `v0.9` with `git checkout v0.9`
-  * Download a [snapshot of `v0.9`](https://github.com/GoogleCloudPlatform/kubernetes/archive/v0.9.tar.gz)
+  * Download a [snapshot of `v0.9`](https://github.com/kubernetes/kubernetes/archive/v0.9.tar.gz)
  * Sync back to `v0.3` with `git checkout v0.3`
-  * Download a [snapshot of `v0.3`](https://github.com/GoogleCloudPlatform/kubernetes/archive/v0.3.tar.gz)
+  * Download a [snapshot of `v0.3`](https://github.com/kubernetes/kubernetes/archive/v0.3.tar.gz)
 
 ## Network Design
 
 - eth0 - Public Interface used for servers/containers to reach the internet
 - eth1 - ServiceNet - Intra-cluster communication (k8s, etcd, etc) communicate via this interface. The `cloud-config` files use the special CoreOS identifier `$private_ipv4` to configure the services.
 - eth2 - Cloud Network - Used for k8s pods to communicate with one another. The proxy service will pass traffic via this interface.
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

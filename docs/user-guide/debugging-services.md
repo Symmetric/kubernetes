@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/user-guide/debugging-services.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -209,8 +181,7 @@ walk-through - you can use your own `Service`'s details here.
 
 ```console
 $ kubectl expose rc hostnames --port=80 --target-port=9376
-NAME              CLUSTER_IP       EXTERNAL_IP       PORT(S)       SELECTOR               AGE
-hostnames         10.0.0.1         <none>            80/TCP        run=hostnames          1h
+service "hostnames" exposed
 ```
 
 And read it back, just to be sure:
@@ -546,13 +517,20 @@ misbehaving.  And yet your `Service` is not working.  You should probably let
 us know, so we can help investigate!
 
 Contact us on
-[IRC](http://webchat.freenode.net/?channels=google-containers) or
+[Slack](../troubleshooting.md#slack) or
 [email](https://groups.google.com/forum/#!forum/google-containers) or
-[GitHub](https://github.com/GoogleCloudPlatform/kubernetes).
+[GitHub](https://github.com/kubernetes/kubernetes).
 
 ## More information
 
 Visit [troubleshooting document](../troubleshooting.md) for more information.
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

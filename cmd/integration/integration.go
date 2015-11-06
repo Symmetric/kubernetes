@@ -38,13 +38,15 @@ import (
 	"k8s.io/kubernetes/pkg/api"
 	apierrors "k8s.io/kubernetes/pkg/api/errors"
 	"k8s.io/kubernetes/pkg/api/latest"
+	"k8s.io/kubernetes/pkg/api/testapi"
+	"k8s.io/kubernetes/pkg/api/unversioned"
 	"k8s.io/kubernetes/pkg/apiserver"
+	"k8s.io/kubernetes/pkg/client/record"
 	client "k8s.io/kubernetes/pkg/client/unversioned"
-	"k8s.io/kubernetes/pkg/client/unversioned/record"
+	"k8s.io/kubernetes/pkg/controller"
 	"k8s.io/kubernetes/pkg/controller/endpoint"
 	"k8s.io/kubernetes/pkg/controller/node"
 	replicationControllerPkg "k8s.io/kubernetes/pkg/controller/replication"
-	explatest "k8s.io/kubernetes/pkg/expapi/latest"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/kubelet"
 	"k8s.io/kubernetes/pkg/kubelet/cadvisor"
@@ -54,6 +56,7 @@ import (
 	"k8s.io/kubernetes/pkg/master"
 	"k8s.io/kubernetes/pkg/tools/etcdtest"
 	"k8s.io/kubernetes/pkg/util"
+	"k8s.io/kubernetes/pkg/util/sets"
 	"k8s.io/kubernetes/pkg/util/wait"
 	"k8s.io/kubernetes/pkg/volume/empty_dir"
 	"k8s.io/kubernetes/plugin/pkg/admission/admit"
@@ -69,8 +72,6 @@ import (
 
 var (
 	fakeDocker1, fakeDocker2 dockertools.FakeDockerClient
-	// API version that should be used by the client to talk to the server.
-	apiVersion string
 	// Limit the number of concurrent tests.
 	maxConcurrency int
 )
@@ -93,7 +94,7 @@ func (h *delegateHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 }
 
-func startComponents(firstManifestURL, secondManifestURL, apiVersion string) (string, string) {
+func startComponents(firstManifestURL, secondManifestURL string) (string, string) {
 	// Setup
 	servers := []string{}
 	glog.Infof("Creating etcd client pointing to %v", servers)
@@ -126,16 +127,26 @@ func startComponents(firstManifestURL, secondManifestURL, apiVersion string) (st
 		glog.Fatalf("Failed to connect to etcd")
 	}
 
-	cl := client.NewOrDie(&client.Config{Host: apiServer.URL, Version: apiVersion})
+	cl := client.NewOrDie(&client.Config{Host: apiServer.URL, Version: testapi.Default.GroupAndVersion()})
 
-	etcdStorage, err := master.NewEtcdStorage(etcdClient, latest.InterfacesFor, latest.Version, etcdtest.PathPrefix())
+	// TODO: caesarxuchao: hacky way to specify version of Experimental client.
+	// We will fix this by supporting multiple group versions in Config
+	cl.ExtensionsClient = client.NewExtensionsOrDie(&client.Config{Host: apiServer.URL, Version: testapi.Extensions.GroupAndVersion()})
+
+	storageVersions := make(map[string]string)
+	etcdStorage, err := master.NewEtcdStorage(etcdClient, latest.GroupOrDie("").InterfacesFor, testapi.Default.GroupAndVersion(), etcdtest.PathPrefix())
+	storageVersions[""] = testapi.Default.GroupAndVersion()
 	if err != nil {
 		glog.Fatalf("Unable to get etcd storage: %v", err)
 	}
-	expEtcdStorage, err := master.NewEtcdStorage(etcdClient, explatest.InterfacesFor, explatest.Version, etcdtest.PathPrefix())
+	expEtcdStorage, err := master.NewEtcdStorage(etcdClient, latest.GroupOrDie("extensions").InterfacesFor, testapi.Extensions.GroupAndVersion(), etcdtest.PathPrefix())
+	storageVersions["extensions"] = testapi.Extensions.GroupAndVersion()
 	if err != nil {
 		glog.Fatalf("Unable to get etcd storage for experimental: %v", err)
 	}
+	storageDestinations := master.NewStorageDestinations()
+	storageDestinations.AddAPIGroup("", etcdStorage)
+	storageDestinations.AddAPIGroup("extensions", expEtcdStorage)
 
 	// Master
 	host, port, err := net.SplitHostPort(strings.TrimLeft(apiServer.URL, "http://"))
@@ -154,19 +165,19 @@ func startComponents(firstManifestURL, secondManifestURL, apiVersion string) (st
 
 	// Create a master and install handlers into mux.
 	m := master.New(&master.Config{
-		DatabaseStorage:       etcdStorage,
-		ExpDatabaseStorage:    expEtcdStorage,
+		StorageDestinations:   storageDestinations,
 		KubeletClient:         fakeKubeletClient{},
 		EnableCoreControllers: true,
 		EnableLogsSupport:     false,
 		EnableProfiling:       true,
 		APIPrefix:             "/api",
-		ExpAPIPrefix:          "/experimental",
+		APIGroupPrefix:        "/apis",
 		Authorizer:            apiserver.NewAlwaysAllowAuthorizer(),
 		AdmissionControl:      admit.NewAlwaysAdmit(),
 		ReadWritePort:         portNumber,
 		PublicAddress:         publicAddress,
 		CacheTimeout:          2 * time.Second,
+		StorageVersions:       storageVersions,
 	})
 	handler.delegate = m.Handler
 
@@ -182,16 +193,15 @@ func startComponents(firstManifestURL, secondManifestURL, apiVersion string) (st
 	eventBroadcaster.StartRecordingToSink(cl.Events(""))
 	scheduler.New(schedulerConfig).Run()
 
-	endpoints := endpointcontroller.NewEndpointController(cl)
 	// ensure the service endpoints are sync'd several times within the window that the integration tests wait
-	go endpoints.Run(3, util.NeverStop)
-
-	controllerManager := replicationControllerPkg.NewReplicationManager(cl, replicationControllerPkg.BurstReplicas)
+	go endpointcontroller.NewEndpointController(cl, controller.NoResyncPeriodFunc).
+		Run(3, util.NeverStop)
 
 	// TODO: Write an integration test for the replication controllers watch.
-	go controllerManager.Run(3, util.NeverStop)
+	go replicationControllerPkg.NewReplicationManager(cl, controller.NoResyncPeriodFunc, replicationControllerPkg.BurstReplicas).
+		Run(3, util.NeverStop)
 
-	nodeController := nodecontroller.NewNodeController(nil, cl, 5*time.Minute, nodecontroller.NewPodEvictor(util.NewFakeRateLimiter()),
+	nodeController := nodecontroller.NewNodeController(nil, cl, 5*time.Minute, util.NewFakeRateLimiter(),
 		40*time.Second, 60*time.Second, 5*time.Second, nil, false)
 	nodeController.Run(5 * time.Second)
 	cadvisorInterface := new(cadvisor.Fake)
@@ -200,16 +210,60 @@ func startComponents(firstManifestURL, secondManifestURL, apiVersion string) (st
 	testRootDir := makeTempDirOrDie("kubelet_integ_1.", "")
 	configFilePath := makeTempDirOrDie("config", testRootDir)
 	glog.Infof("Using %s as root dir for kubelet #1", testRootDir)
-	fakeDocker1.VersionInfo = docker.Env{"ApiVersion=1.15"}
-	kcfg := kubeletapp.SimpleKubelet(cl, &fakeDocker1, "localhost", testRootDir, firstManifestURL, "127.0.0.1", 10250, api.NamespaceDefault, empty_dir.ProbeVolumePlugins(), nil, cadvisorInterface, configFilePath, nil, kubecontainer.FakeOS{})
+	fakeDocker1.VersionInfo = docker.Env{"ApiVersion=1.20"}
+
+	kcfg := kubeletapp.SimpleKubelet(
+		cl,
+		&fakeDocker1,
+		"localhost",
+		testRootDir,
+		firstManifestURL,
+		"127.0.0.1",
+		10250, /* KubeletPort */
+		0,     /* ReadOnlyPort */
+		api.NamespaceDefault,
+		empty_dir.ProbeVolumePlugins(),
+		nil,
+		cadvisorInterface,
+		configFilePath,
+		nil,
+		kubecontainer.FakeOS{},
+		1*time.Second,  /* FileCheckFrequency */
+		1*time.Second,  /* HTTPCheckFrequency */
+		10*time.Second, /* MinimumGCAge */
+		3*time.Second,  /* NodeStatusUpdateFrequency */
+		10*time.Second /* SyncFrequency */)
+
 	kubeletapp.RunKubelet(kcfg, nil)
 	// Kubelet (machine)
 	// Create a second kubelet so that the guestbook example's two redis slaves both
 	// have a place they can schedule.
 	testRootDir = makeTempDirOrDie("kubelet_integ_2.", "")
 	glog.Infof("Using %s as root dir for kubelet #2", testRootDir)
-	fakeDocker2.VersionInfo = docker.Env{"ApiVersion=1.15"}
-	kcfg = kubeletapp.SimpleKubelet(cl, &fakeDocker2, "127.0.0.1", testRootDir, secondManifestURL, "127.0.0.1", 10251, api.NamespaceDefault, empty_dir.ProbeVolumePlugins(), nil, cadvisorInterface, "", nil, kubecontainer.FakeOS{})
+	fakeDocker2.VersionInfo = docker.Env{"ApiVersion=1.20"}
+
+	kcfg = kubeletapp.SimpleKubelet(
+		cl,
+		&fakeDocker2,
+		"127.0.0.1",
+		testRootDir,
+		secondManifestURL,
+		"127.0.0.1",
+		10251, /* KubeletPort */
+		0,     /* ReadOnlyPort */
+		api.NamespaceDefault,
+		empty_dir.ProbeVolumePlugins(),
+		nil,
+		cadvisorInterface,
+		"",
+		nil,
+		kubecontainer.FakeOS{},
+		1*time.Second,  /* FileCheckFrequency */
+		1*time.Second,  /* HTTPCheckFrequency */
+		10*time.Second, /* MinimumGCAge */
+		3*time.Second,  /* NodeStatusUpdateFrequency */
+		10*time.Second /* SyncFrequency */)
+
 	kubeletapp.RunKubelet(kcfg, nil)
 	return apiServer.URL, configFilePath
 }
@@ -498,7 +552,7 @@ func runSelfLinkTestOnNamespace(c *client.Client, namespace string) {
 
 func runAtomicPutTest(c *client.Client) {
 	svcBody := api.Service{
-		TypeMeta: api.TypeMeta{
+		TypeMeta: unversioned.TypeMeta{
 			APIVersion: c.APIVersion(),
 		},
 		ObjectMeta: api.ObjectMeta{
@@ -580,7 +634,7 @@ func runPatchTest(c *client.Client) {
 	name := "patchservice"
 	resource := "services"
 	svcBody := api.Service{
-		TypeMeta: api.TypeMeta{
+		TypeMeta: unversioned.TypeMeta{
 			APIVersion: c.APIVersion(),
 		},
 		ObjectMeta: api.ObjectMeta{
@@ -691,7 +745,7 @@ func runMasterServiceTest(client *client.Client) {
 		glog.Fatalf("unexpected error listing services: %v", err)
 	}
 	var foundRW bool
-	found := util.StringSet{}
+	found := sets.String{}
 	for i := range svcList.Items {
 		found.Insert(svcList.Items[i].Name)
 		if svcList.Items[i].Name == "kubernetes" {
@@ -817,7 +871,7 @@ func runServiceTest(client *client.Client) {
 	if err != nil {
 		glog.Fatalf("Failed to list services across namespaces: %v", err)
 	}
-	names := util.NewStringSet()
+	names := sets.NewString()
 	for _, svc := range svcList.Items {
 		names.Insert(fmt.Sprintf("%s/%s", svc.Namespace, svc.Name))
 	}
@@ -891,7 +945,6 @@ func runSchedulerNoPhantomPodsTest(client *client.Client) {
 type testFunc func(*client.Client)
 
 func addFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&apiVersion, "api-version", latest.Version, "API version that should be used by the client for communicating with the server")
 	fs.IntVar(
 		&maxConcurrency, "max-concurrency", -1, "Maximum number of tests to be run simultaneously. Unlimited if set to negative.")
 }
@@ -911,18 +964,21 @@ func main() {
 		glog.Fatalf("This test has timed out.")
 	}()
 
-	glog.Infof("Running tests for APIVersion: %s", apiVersion)
+	glog.Infof("Running tests for APIVersion: %s", os.Getenv("KUBE_TEST_API"))
 
 	firstManifestURL := ServeCachedManifestFile(testPodSpecFile)
 	secondManifestURL := ServeCachedManifestFile(testPodSpecFile)
-	apiServerURL, _ := startComponents(firstManifestURL, secondManifestURL, apiVersion)
+	apiServerURL, _ := startComponents(firstManifestURL, secondManifestURL)
 
 	// Ok. we're good to go.
 	glog.Infof("API Server started on %s", apiServerURL)
 	// Wait for the synchronization threads to come up.
 	time.Sleep(time.Second * 10)
 
-	kubeClient := client.NewOrDie(&client.Config{Host: apiServerURL, Version: apiVersion})
+	kubeClient := client.NewOrDie(&client.Config{Host: apiServerURL, Version: testapi.Default.GroupAndVersion()})
+	// TODO: caesarxuchao: hacky way to specify version of Experimental client.
+	// We will fix this by supporting multiple group versions in Config
+	kubeClient.ExtensionsClient = client.NewExtensionsOrDie(&client.Config{Host: apiServerURL, Version: testapi.Extensions.GroupAndVersion()})
 
 	// Run tests in parallel
 	testFuncs := []testFunc{
@@ -962,7 +1018,7 @@ func main() {
 	// Check that kubelet tried to make the containers.
 	// Using a set to list unique creation attempts. Our fake is
 	// really stupid, so kubelet tries to create these multiple times.
-	createdConts := util.StringSet{}
+	createdConts := sets.String{}
 	for _, p := range fakeDocker1.Created {
 		// The last 8 characters are random, so slice them off.
 		if n := len(p); n > 8 {

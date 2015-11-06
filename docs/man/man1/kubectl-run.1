@@ -31,12 +31,12 @@ Creates a replication controller to manage the created container(s).
     If true, only print the object that would be sent, without sending it.
 
 .PP
-\fB\-\-generator\fP=""
-    The name of the API generator to use.  Default is 'run/v1' if \-\-restart=Always, otherwise the default is 'run\-pod/v1'.
+\fB\-\-env\fP=[]
+    Environment variables to set in the container
 
 .PP
-\fB\-h\fP, \fB\-\-help\fP=false
-    help for run
+\fB\-\-generator\fP=""
+    The name of the API generator to use.  Default is 'run/v1' if \-\-restart=Always, otherwise the default is 'run\-pod/v1'.
 
 .PP
 \fB\-\-hostport\fP=\-1
@@ -51,12 +51,22 @@ Creates a replication controller to manage the created container(s).
     Labels to apply to the pod(s).
 
 .PP
+\fB\-\-leave\-stdin\-open\fP=false
+    If the pod is started in interactive mode or with stdin, leave stdin open after the first attach completes. By default, stdin will be closed after the first attach completes.
+
+.PP
+\fB\-\-limits\fP=""
+    The resource requirement limits for this container.  For example, 'cpu=200m,memory=512Mi'
+
+.PP
 \fB\-\-no\-headers\fP=false
     When using the default output, don't print headers.
 
 .PP
 \fB\-o\fP, \fB\-\-output\fP=""
-    Output format. One of: json|yaml|template|templatefile|wide|jsonpath.
+    Output format. One of: json|yaml|wide|name|go\-template=...|go\-template\-file=...|jsonpath=...|jsonpath\-file=... See golang template [
+\[la]http://golang.org/pkg/text/template/#pkg-overview\[ra]] and jsonpath template [
+\[la]http://releases.k8s.io/release-1.1/docs/user-guide/jsonpath.md\[ra]].
 
 .PP
 \fB\-\-output\-version\fP=""
@@ -73,6 +83,10 @@ Creates a replication controller to manage the created container(s).
 .PP
 \fB\-r\fP, \fB\-\-replicas\fP=1
     Number of replicas to create for this container. Default is 1.
+
+.PP
+\fB\-\-requests\fP=""
+    The resource requirement requests for this container.  For example, 'cpu=100m,memory=256Mi'
 
 .PP
 \fB\-\-restart\fP="Always"
@@ -92,9 +106,8 @@ Creates a replication controller to manage the created container(s).
 
 .PP
 \fB\-t\fP, \fB\-\-template\fP=""
-    Template string or path to template file to use when \-o=template, \-o=templatefile or \-o=jsonpath.  The template format is golang templates [
-\[la]http://golang.org/pkg/text/template/#pkg-overview\[ra]]. The jsonpath template is composed of jsonpath expressions enclosed by {} [
-\[la]http://releases.k8s.io/HEAD/docs/user-guide/jsonpath.md\[ra]]
+    Template string or path to template file to use when \-o=go\-template, \-o=go\-template\-file. The template format is golang templates [
+\[la]http://golang.org/pkg/text/template/#pkg-overview\[ra]].
 
 .PP
 \fB\-\-tty\fP=false
@@ -200,10 +213,16 @@ Creates a replication controller to manage the created container(s).
 .RS
 
 .nf
-# Starts a single instance of nginx.
+# Start a single instance of nginx.
 $ kubectl run nginx \-\-image=nginx
 
-# Starts a replicated instance of nginx.
+# Start a single instance of hazelcast and let the container expose port 5701 .
+$ kubectl run hazelcast \-\-image=hazelcast \-\-port=5701
+
+# Start a single instance of hazelcast and set environment variables "DNS\_DOMAIN=cluster" and "POD\_NAMESPACE=default" in the container.
+$ kubectl run hazelcast \-\-image=hazelcast \-\-env="DNS\_DOMAIN=local" \-\-env="POD\_NAMESPACE=default"
+
+# Start a replicated instance of nginx.
 $ kubectl run nginx \-\-image=nginx \-\-replicas=5
 
 # Dry run. Print the corresponding API objects without creating them.

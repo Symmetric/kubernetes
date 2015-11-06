@@ -26,11 +26,12 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 	cadvisorApi "github.com/google/cadvisor/info/v1"
 	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/client/unversioned/record"
+	"k8s.io/kubernetes/pkg/client/record"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/dockertools"
 	"k8s.io/kubernetes/pkg/kubelet/network"
 	"k8s.io/kubernetes/pkg/types"
+	"k8s.io/kubernetes/pkg/util"
 )
 
 func newPod(uid, name string) *api.Pod {
@@ -146,7 +147,7 @@ func TestUpdateType(t *testing.T) {
 				if gotType != expectedTypes[i] {
 					t.Fatalf("Expected sync type %v got %v for pod with uid %v", expectedTypes[i], gotType, p.UID)
 				}
-			case <-time.After(100 * time.Millisecond):
+			case <-time.After(util.ForeverTestTimeout):
 				t.Errorf("Unexpected delay is running pod worker")
 			}
 		}

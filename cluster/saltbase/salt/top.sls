@@ -10,11 +10,6 @@ base:
   'roles:kubernetes-pool':
     - match: grain
     - docker
-{% if grains['cloud'] is defined and grains['cloud'] == 'azure' %}
-    - openvpn-client
-{% elif grains.network_mode is defined and grains.network_mode == 'calico' %}
-    - calico.node
-{% endif %}
     - helpers
     - cadvisor
     - kube-client-tools
@@ -31,10 +26,9 @@ base:
     - kube-registry-proxy
 {% endif %}
     - logrotate
-{% if grains['cloud'] is defined and grains.cloud == 'gce' %}
     - supervisor
-{% else %}
-    - monit
+{% if grains.network_mode is defined and grains.network_mode == 'calico' %}
+    - calico.node
 {% endif %}
 
   'roles:kubernetes-master':
@@ -44,11 +38,7 @@ base:
     - kube-apiserver
     - kube-controller-manager
     - kube-scheduler
-{% if grains['cloud'] is defined and grains.cloud == 'gce' %}
     - supervisor
-{% else %}
-    - monit
-{% endif %}
 {% if grains['cloud'] is defined and not grains.cloud in [ 'aws', 'gce', 'vagrant' ] %}
     - nginx
 {% endif %}
@@ -67,9 +57,6 @@ base:
     - logrotate
 {% endif %}
     - kube-addons
-{% if grains['cloud'] is defined and grains['cloud'] == 'azure' %}
-    - openvpn
-{% endif %}
 {% if grains['cloud'] is defined and grains['cloud'] in [ 'vagrant', 'gce', 'aws' ] %}
     - docker
     - kubelet

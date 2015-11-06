@@ -1,39 +1,11 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/user-guide/docker-cli-to-kubectl.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
 # kubectl for docker users
 
-In this doc, we introduce the Kubernetes command line to for interacting with the api to docker-cli users. The tool, kubectl, is designed to be familiar to docker-cli users but there are a few necessary differences. Each section of this doc highlights a docker subcommand explains the kubectl equivalent.
+In this doc, we introduce the Kubernetes command line for interacting with the api to docker-cli users. The tool, kubectl, is designed to be familiar to docker-cli users but there are a few necessary differences. Each section of this doc highlights a docker subcommand explains the kubectl equivalent.
 
 **Table of Contents**
 <!-- BEGIN MUNGE: GENERATED_TOC -->
@@ -58,7 +30,7 @@ How do I run an nginx container and expose it to the world? Checkout [kubectl ru
 With docker:
 
 ```console
-$ docker run -d --restart=always --name nginx-app -p 80:80 nginx
+$ docker run -d --restart=always -e DOMAIN=cluster --name nginx-app -p 80:80 nginx
 a9ec34d9878748d2f33dc20cb25c714ff21da8d40558b45bfaec9955859075d0
 $ docker ps
 CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                         NAMES
@@ -69,9 +41,8 @@ With kubectl:
 
 ```console
 # start the pod running nginx
-$ kubectl run --image=nginx nginx-app
-CONTROLLER   CONTAINER(S)   IMAGE(S)   SELECTOR        REPLICAS
-nginx-app    nginx-app      nginx      run=nginx-app   1
+$ kubectl run --image=nginx nginx-app --port=80 --env="DOMAIN=cluster"
+replicationcontroller "nginx-app" created
 # expose a port through with a service
 $ kubectl expose rc nginx-app --port=80 --name=nginx-http
 ```
@@ -339,6 +310,13 @@ Heapster is running at https://108.59.85.141/api/v1/proxy/namespaces/kube-system
 InfluxDB is running at https://108.59.85.141/api/v1/proxy/namespaces/kube-system/services/monitoring-influxdb
 
 ```
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

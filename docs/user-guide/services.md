@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/user-guide/services.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 
@@ -51,6 +23,7 @@ Documentation for other releases can be found at
   - [Publishing services - service types](#publishing-services---service-types)
     - [Type NodePort](#type-nodeport)
     - [Type LoadBalancer](#type-loadbalancer)
+    - [External IPs](#external-ips)
   - [Shortcomings](#shortcomings)
   - [Future work](#future-work)
   - [The gory details of virtual IPs](#the-gory-details-of-virtual-ips)
@@ -219,7 +192,7 @@ appropriate backend without the clients knowing anything about Kubernetes or
 
 ![Services overview diagram](services-overview.png)
 
-By default, the choice of backend is random.  Client-IP based session affinity
+By default, the choice of backend is round robin.  Client-IP based session affinity
 can be selected by setting `service.spec.sessionAffinity` to `"ClientIP"` (the
 default is `"None"`).
 
@@ -298,7 +271,7 @@ variables and DNS.
 When a `Pod` is run on a `Node`, the kubelet adds a set of environment variables
 for each active `Service`.  It supports both [Docker links
 compatible](https://docs.docker.com/userguide/dockerlinks/) variables (see
-[makeLinkVariables](http://releases.k8s.io/HEAD/pkg/kubelet/envvars/envvars.go#L49))
+[makeLinkVariables](http://releases.k8s.io/release-1.1/pkg/kubelet/envvars/envvars.go#L49))
 and simpler `{SVCNAME}_SERVICE_HOST` and `{SVCNAME}_SERVICE_PORT` variables,
 where the Service name is upper-cased and dashes are converted to underscores.
 
@@ -323,7 +296,7 @@ variables will not be populated.  DNS does not have this restriction.
 ### DNS
 
 An optional (though strongly recommended) [cluster
-add-on](http://releases.k8s.io/HEAD/cluster/addons/README.md) is a DNS server.  The
+add-on](http://releases.k8s.io/release-1.1/cluster/addons/README.md) is a DNS server.  The
 DNS server watches the Kubernetes API for new `Services` and creates a set of
 DNS records for each.  If DNS has been enabled throughout the cluster then all
 `Pods` should be able to do name resolution of `Services` automatically.
@@ -433,6 +406,7 @@ information about the provisioned balancer will be published in the `Service`'s
             }
         ],
         "clusterIP": "10.0.171.239",
+        "loadBalancerIP": "78.11.24.19",
         "type": "LoadBalancer"
     },
     "status": {
@@ -448,7 +422,47 @@ information about the provisioned balancer will be published in the `Service`'s
 ```
 
 Traffic from the external load balancer will be directed at the backend `Pods`,
-though exactly how that works depends on the cloud provider.
+though exactly how that works depends on the cloud provider. Some cloud providers allow
+the `loadBalancerIP` to be specified. In those cases, the load-balancer will be created
+with the user-specified `loadBalancerIP`. If the `loadBalancerIP` field is not specified,
+an ephemeral IP will be assigned to the loadBalancer. If the `loadBalancerIP` is specified, but the
+cloud provider does not support the feature, the field will be ignored.
+
+### External IPs
+
+If there are external IPs that route to one or more cluster nodes, Kubernetes services can be exposed on those
+`externalIPs`. Traffic that ingresses into the cluster with the external IP (as destination IP), on the service port,
+will be routed to one of the service endpoints. `externalIPs` are not managed by Kubernetes and are the responsibility
+of the cluster administrator.
+
+In the ServiceSpec, `externalIPs` can be specified along with any of the `ServiceTypes`.
+In the example below, my-service can be accessed by clients on 80.11.12.10:80 (externalIP:port)
+
+```json
+{
+    "kind": "Service",
+    "apiVersion": "v1",
+    "metadata": {
+        "name": "my-service"
+    },
+    "spec": {
+        "selector": {
+            "app": "MyApp"
+        },
+        "ports": [
+            {
+                "name": "http",
+                "protocol": "TCP",
+                "port": 80,
+                "targetPort": 9376
+            }
+        ],
+        "externalIPs" : [
+            "80.11.12.10"
+        ]
+    }
+}
+```
 
 ## Shortcomings
 
@@ -545,7 +559,14 @@ of which `Pods` they are actually accessing.
 
 Service is a top-level resource in the kubernetes REST API. More details about the
 API object can be found at: [Service API
-object](https://htmlpreview.github.io/?https://github.com/GoogleCloudPlatform/kubernetes/HEAD/docs/api-reference/definitions.html#_v1_service).
+object](https://htmlpreview.github.io/?https://github.com/kubernetes/kubernetes/release-1.1/docs/api-reference/v1/definitions.html#_v1_service).
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

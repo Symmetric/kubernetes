@@ -19,6 +19,7 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -33,13 +34,13 @@ import (
 )
 
 const (
-	attach_example = `# get output from running pod 123456-7890, using the first container by default
+	attach_example = `# Get output from running pod 123456-7890, using the first container by default
 $ kubectl attach 123456-7890
 
-# get output from ruby-container from pod 123456-7890
+# Get output from ruby-container from pod 123456-7890
 $ kubectl attach 123456-7890 -c ruby-container date
 
-# switch to raw terminal mode, sends stdin to 'bash' in ruby-container from pod 123456-780
+# Switch to raw terminal mode, sends stdin to 'bash' in ruby-container from pod 123456-780
 # and sends stdout/stderr from 'bash' back to the client
 $ kubectl attach 123456-7890 -c ruby-container -i -t`
 )
@@ -72,15 +73,18 @@ func NewCmdAttach(f *cmdutil.Factory, cmdIn io.Reader, cmdOut, cmdErr io.Writer)
 
 // RemoteAttach defines the interface accepted by the Attach command - provided for test stubbing
 type RemoteAttach interface {
-	Attach(req *client.Request, config *client.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
+	Attach(method string, url *url.URL, config *client.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
 }
 
 // DefaultRemoteAttach is the standard implementation of attaching
 type DefaultRemoteAttach struct{}
 
-func (*DefaultRemoteAttach) Attach(req *client.Request, config *client.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
-	attach := remotecommand.NewAttach(req, config, stdin, stdout, stderr, tty)
-	return attach.Execute()
+func (*DefaultRemoteAttach) Attach(method string, url *url.URL, config *client.Config, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+	exec, err := remotecommand.NewExecutor(config, method, url)
+	if err != nil {
+		return err
+	}
+	return exec.Stream(stdin, stdout, stderr, tty)
 }
 
 // AttachOptions declare the arguments accepted by the Exec command
@@ -156,12 +160,6 @@ func (p *AttachOptions) Run() error {
 		return fmt.Errorf("pod %s is not running and cannot be attached to; current phase is %s", p.PodName, pod.Status.Phase)
 	}
 
-	containerName := p.ContainerName
-	if len(containerName) == 0 {
-		glog.V(4).Infof("defaulting container name to %s", pod.Spec.Containers[0].Name)
-		containerName = pod.Spec.Containers[0].Name
-	}
-
 	// TODO: refactor with terminal helpers from the edit utility once that is merged
 	var stdin io.Reader
 	tty := p.TTY
@@ -204,8 +202,24 @@ func (p *AttachOptions) Run() error {
 		Resource("pods").
 		Name(pod.Name).
 		Namespace(pod.Namespace).
-		SubResource("attach").
-		Param("container", containerName)
+		SubResource("attach")
+	req.VersionedParams(&api.PodAttachOptions{
+		Container: p.GetContainerName(pod),
+		Stdin:     stdin != nil,
+		Stdout:    p.Out != nil,
+		Stderr:    p.Err != nil,
+		TTY:       tty,
+	}, api.Scheme)
 
-	return p.Attach.Attach(req, p.Config, stdin, p.Out, p.Err, tty)
+	return p.Attach.Attach("POST", req.URL(), p.Config, stdin, p.Out, p.Err, tty)
+}
+
+// GetContainerName returns the name of the container to attach to, with a fallback.
+func (p *AttachOptions) GetContainerName(pod *api.Pod) string {
+	if len(p.ContainerName) > 0 {
+		return p.ContainerName
+	}
+
+	glog.V(4).Infof("defaulting container name to %s", pod.Spec.Containers[0].Name)
+	return pod.Spec.Containers[0].Name
 }

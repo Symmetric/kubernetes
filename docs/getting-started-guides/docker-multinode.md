@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/getting-started-guides/docker-multinode.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 Running Multi-Node Kubernetes Using Docker
@@ -74,6 +46,14 @@ This pattern is necessary because the `flannel` daemon is responsible for settin
 all of the Docker containers created by Kubernetes.  To achieve this, it must run outside of the _main_ Docker daemon.  However,
 it is still useful to use containers for deployment and management, so we create a simpler _bootstrap_ daemon to achieve this.
 
+You can specify k8s version on very node before install:
+
+```
+export K8S_VERSION=<your_k8s_version (e.g. 1.0.3)>
+```
+
+Otherwise, we'll use latest `hyperkube` image as default k8s version.
+
 ## Master Node
 
 The first step in the process is to initialize the master node.
@@ -81,7 +61,6 @@ The first step in the process is to initialize the master node.
 Clone the Kubernetes repo, and run [master.sh](docker-multinode/master.sh) on the master machine with root:
 
 ```sh
-export K8S_VERSION=<your_k8s_version (e.g. 1.0.1)>
 cd kubernetes/docs/getting-started-guides/docker-multinode/
 ./master.sh
 ```
@@ -97,7 +76,6 @@ Once your master is up and running you can add one or more workers on different 
 Clone the Kubernetes repo, and run [worker.sh](docker-multinode/worker.sh) on the worker machine with root:
 
 ```sh
-export K8S_VERSION=<your_k8s_version (e.g. 1.0.1)>
 export MASTER_IP=<your_master_ip (e.g. 1.2.3.4)>
 cd kubernetes/docs/getting-started-guides/docker-multinode/
 ./worker.sh
@@ -116,6 +94,13 @@ See [here](docker-multinode/deployDNS.md) for instructions.
 Once your cluster has been created you can [test it out](docker-multinode/testing.md)
 
 For more complete applications, please look in the [examples directory](../../examples/)
+
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
 
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->

@@ -166,7 +166,7 @@ function wait-cluster-readiness {
 
   local timeout=120
   while [[ $timeout -ne 0 ]]; do
-    nb_ready_minions=$("${kubectl}" get nodes -o template -t "{{range.items}}{{range.status.conditions}}{{.type}}{{end}}:{{end}}" --api-version=v1 2>/dev/null | tr ':' '\n' | grep -c Ready || true)
+    nb_ready_minions=$("${kubectl}" get nodes -o go-template="{{range.items}}{{range.status.conditions}}{{.type}}{{end}}:{{end}}" --api-version=v1 2>/dev/null | tr ':' '\n' | grep -c Ready || true)
     echo "Nb ready minions: $nb_ready_minions / $NUM_MINIONS"
     if [[ "$nb_ready_minions" -eq "$NUM_MINIONS" ]]; then
         return 0
@@ -183,17 +183,24 @@ function wait-cluster-readiness {
 function kube-up {
   detect-master
   detect-minions
-  gen-kube-bearertoken
+  load-or-gen-kube-bearertoken
   initialize-pool keep_base_image
   initialize-network
 
   readonly ssh_keys="$(cat ~/.ssh/id_*.pub | sed 's/^/  - /')"
   readonly kubernetes_dir="$POOL_PATH/kubernetes"
-  readonly discovery=$(curl -s https://discovery.etcd.io/new?size=$(($NUM_MINIONS+1)))
-
-  readonly machines=$(join , "${KUBE_MINION_IP_ADDRESSES[@]}")
 
   local i
+  for (( i = 0 ; i <= $NUM_MINIONS ; i++ )); do
+    if [[ $i -eq $NUM_MINIONS ]]; then
+        etcd2_initial_cluster[$i]="${MASTER_NAME}=http://${MASTER_IP}:2380"
+    else
+        etcd2_initial_cluster[$i]="${MINION_NAMES[$i]}=http://${MINION_IPS[$i]}:2380"
+    fi
+  done
+  etcd2_initial_cluster=$(join , "${etcd2_initial_cluster[@]}")
+  readonly machines=$(join , "${KUBE_MINION_IP_ADDRESSES[@]}")
+
   for (( i = 0 ; i <= $NUM_MINIONS ; i++ )); do
     if [[ $i -eq $NUM_MINIONS ]]; then
         type=master
@@ -259,7 +266,7 @@ function upload-server-tars {
   tar -x -C "$POOL_PATH/kubernetes" -f "$SERVER_BINARY_TAR" kubernetes
   rm -rf "$POOL_PATH/kubernetes/bin"
   mv "$POOL_PATH/kubernetes/kubernetes/server/bin" "$POOL_PATH/kubernetes/bin"
-  rmdir "$POOL_PATH/kubernetes/kubernetes/server" "$POOL_PATH/kubernetes/kubernetes"
+  rm -fr "$POOL_PATH/kubernetes/kubernetes"
 }
 
 # Update a kubernetes cluster with latest source

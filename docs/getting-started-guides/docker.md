@@ -1,33 +1,5 @@
 <!-- BEGIN MUNGE: UNVERSIONED_WARNING -->
 
-<!-- BEGIN STRIP_FOR_RELEASE -->
-
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-<img src="http://kubernetes.io/img/warning.png" alt="WARNING"
-     width="25" height="25">
-
-<h2>PLEASE NOTE: This document applies to the HEAD of the source tree</h2>
-
-If you are using a released version of Kubernetes, you should
-refer to the docs that go with that version.
-
-<strong>
-The latest 1.0.x release of this document can be found
-[here](http://releases.k8s.io/release-1.0/docs/getting-started-guides/docker.md).
-
-Documentation for other releases can be found at
-[releases.k8s.io](http://releases.k8s.io).
-</strong>
---
-
-<!-- END STRIP_FOR_RELEASE -->
 
 <!-- END MUNGE: UNVERSIONED_WARNING -->
 Running Kubernetes locally via Docker
@@ -42,7 +14,7 @@ Running Kubernetes locally via Docker
 - [Step Three: Run the service proxy](#step-three-run-the-service-proxy)
 - [Test it out](#test-it-out)
 - [Run an application](#run-an-application)
-- [Expose it as a service:](#expose-it-as-a-service)
+- [Expose it as a service](#expose-it-as-a-service)
 - [A note on turning down your cluster](#a-note-on-turning-down-your-cluster)
 
 ### Overview
@@ -92,14 +64,24 @@ docker run --net=host -d gcr.io/google_containers/etcd:2.0.12 /usr/local/bin/etc
 ### Step Two: Run the master
 
 ```sh
-docker run --net=host --privileged -d -v /sys:/sys:ro -v /var/run/docker.sock:/var/run/docker.sock  gcr.io/google_containers/hyperkube:v1.0.1 /hyperkube kubelet --api-servers=http://localhost:8080 --v=2 --address=0.0.0.0 --enable-server --hostname-override=127.0.0.1 --config=/etc/kubernetes/manifests
+docker run \
+    --volume=/:/rootfs:ro \
+    --volume=/sys:/sys:ro \
+    --volume=/dev:/dev \
+    --volume=/var/lib/docker/:/var/lib/docker:ro \
+    --volume=/var/lib/kubelet/:/var/lib/kubelet:rw \
+    --volume=/var/run:/var/run:rw \
+    --net=host \
+    --pid=host \ 
+    --privileged=true \
+    -d \
+    gcr.io/google_containers/hyperkube:v1.0.1 \
+    /hyperkube kubelet --containerized --hostname-override="127.0.0.1" --address="0.0.0.0" --api-servers=http://localhost:8080 --config=/etc/kubernetes/manifests
 ```
 
 This actually runs the kubelet, which in turn runs a [pod](../user-guide/pods.md) that contains the other master components.
 
 ### Step Three: Run the service proxy
-
-*Note, this could be combined with master above, but it requires --privileged for iptables manipulation*
 
 ```sh
 docker run -d --net=host --privileged gcr.io/google_containers/hyperkube:v1.0.1 /hyperkube proxy --master=http://127.0.0.1:8080 --v=2
@@ -119,7 +101,7 @@ On OS/X you will need to set up port forwarding via ssh:
 boot2docker ssh -L8080:localhost:8080
 ```
 
-List the nodes in your cluster by running::
+List the nodes in your cluster by running:
 
 ```sh
 kubectl get nodes
@@ -140,7 +122,7 @@ If you are running different Kubernetes clusters, you may need to specify `-s ht
 kubectl -s http://localhost:8080 run nginx --image=nginx --port=80
 ```
 
-now run `docker ps` you should see nginx running.  You may need to wait a few minutes for the image to get pulled.
+Now run `docker ps` you should see nginx running.  You may need to wait a few minutes for the image to get pulled.
 
 ### Expose it as a service
 
@@ -148,23 +130,22 @@ now run `docker ps` you should see nginx running.  You may need to wait a few mi
 kubectl expose rc nginx --port=80
 ```
 
-This should print:
-
-```console
-NAME              CLUSTER_IP       EXTERNAL_IP       PORT(S)       SELECTOR               AGE
-nginx             10.0.93.211      <none>            80/TCP        run=nginx              1h
-```
-
-If `CLUSTER_IP` is blank run the following command to obtain it. Know issue #10836
+Run the following command to obtain the IP of this service we just created. There are two IPs, the first one is internal (CLUSTER_IP), and the second one is the external load-balanced IP.
 
 ```sh
 kubectl get svc nginx
 ```
 
-Hit the webserver:
+Alternatively, you can obtain only the first IP (CLUSTER_IP) by running:
 
 ```sh
-curl <insert-ip-from-above-here>
+kubectl get svc nginx --template={{.spec.clusterIP}}
+```
+
+Hit the webserver with the first IP (CLUSTER_IP):
+
+```sh
+curl <insert-cluster-ip-here>
 ```
 
 Note that you will need run this curl command on your boot2docker VM if you are running on OS X.
@@ -175,6 +156,13 @@ Many of these containers run under the management of the `kubelet` binary, which
 the cluster, you need to first kill the kubelet container, and then any other containers.
 
 You may use `docker kill $(docker ps -aq)`, note this removes _all_ containers running under Docker, so use with caution.
+
+
+
+<!-- BEGIN MUNGE: IS_VERSIONED -->
+<!-- TAG IS_VERSIONED -->
+<!-- END MUNGE: IS_VERSIONED -->
+
 
 <!-- BEGIN MUNGE: GENERATED_ANALYTICS -->
 [![Analytics](https://kubernetes-site.appspot.com/UA-36037335-10/GitHub/docs/getting-started-guides/docker.md?pixel)]()

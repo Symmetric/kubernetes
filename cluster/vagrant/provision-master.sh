@@ -21,15 +21,22 @@ set -e
 # See: https://github.com/mitchellh/vagrant/issues/2430
 hostnamectl set-hostname ${MASTER_NAME}
 
-# Workaround to vagrant inability to guess interface naming sequence
-# Tell system to abandon the new naming scheme and use eth* instead
-rm -f /etc/sysconfig/network-scripts/ifcfg-enp0s3
+if [[ "$(grep 'VERSION_ID' /etc/os-release)" =~ ^VERSION_ID=21 ]]; then
+  # Workaround to vagrant inability to guess interface naming sequence
+  # Tell system to abandon the new naming scheme and use eth* instead
+  rm -f /etc/sysconfig/network-scripts/ifcfg-enp0s3
 
-# Disable network interface being managed by Network Manager (needed for Fedora 21+)
-NETWORK_CONF_PATH=/etc/sysconfig/network-scripts/
-grep -q ^NM_CONTROLLED= ${NETWORK_CONF_PATH}ifcfg-eth1 || echo 'NM_CONTROLLED=no' >> ${NETWORK_CONF_PATH}ifcfg-eth1
-sed -i 's/^#NM_CONTROLLED=.*/NM_CONTROLLED=no/' ${NETWORK_CONF_PATH}ifcfg-eth1
-systemctl restart network
+  # Disable network interface being managed by Network Manager (needed for Fedora 21+)
+  NETWORK_CONF_PATH=/etc/sysconfig/network-scripts/
+  if_to_edit=$( find ${NETWORK_CONF_PATH}ifcfg-* | xargs grep -l VAGRANT-BEGIN )
+  for if_conf in ${if_to_edit}; do
+    grep -q ^NM_CONTROLLED= ${if_conf} || echo 'NM_CONTROLLED=no' >> ${if_conf}
+    sed -i 's/#^NM_CONTROLLED=.*/NM_CONTROLLED=no/' ${if_conf}
+  done;
+  systemctl restart network
+fi
+
+NETWORK_IF_NAME=`echo ${if_to_edit} | awk -F- '{ print $3 }'`
 
 function release_not_found() {
   echo "It looks as if you don't have a compiled version of Kubernetes.  If you" >&2
@@ -103,14 +110,15 @@ grains:
   node_ip: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
   publicAddressOverride: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
   network_mode: '$(echo "$NETWORK_MODE" | sed -e "s/'/''/g")'
-  networkInterfaceName: eth1
+  networkInterfaceName: '$(echo "$NETWORK_IF_NAME" | sed -e "s/'/''/g")'
   api_servers: '$(echo "$MASTER_IP" | sed -e "s/'/''/g")'
   cloud: vagrant
   roles:
     - kubernetes-master
   runtime_config: '$(echo "$RUNTIME_CONFIG" | sed -e "s/'/''/g")'
   docker_opts: '$(echo "$DOCKER_OPTS" | sed -e "s/'/''/g")'
-  master_extra_sans: '$(echo "$MASTER_EXTRA_SANS" | sed -e "s/'/''/g")'  
+  master_extra_sans: '$(echo "$MASTER_EXTRA_SANS" | sed -e "s/'/''/g")'
+  keep_host_etcd: true
   cbr-cidr: '$(echo "$MASTER_CONTAINER_CIDR" | sed -e "s/'/''/g")'
 EOF
 
@@ -130,6 +138,7 @@ cat <<EOF >/srv/salt-overlay/pillar/cluster-params.sls
   dns_domain: '$(echo "$DNS_DOMAIN" | sed -e "s/'/''/g")'
   instance_prefix: '$(echo "$INSTANCE_PREFIX" | sed -e "s/'/''/g")'
   admission_control: '$(echo "$ADMISSION_CONTROL" | sed -e "s/'/''/g")'
+  enable_cpu_cfs_quota: '$(echo "$ENABLE_CPU_CFS_QUOTA" | sed -e "s/'/''/g")'
 EOF
 
 # Configure the salt-master
@@ -256,6 +265,19 @@ pushd /kube-install
   ./kubernetes/saltbase/install.sh "${server_binary_tar##*/}"
 popd
 
+# Enable Fedora Cockpit on host to support Kubernetes administration
+# Access it by going to <master-ip>:9090 and login as vagrant/vagrant
+if ! which /usr/libexec/cockpit-ws &>/dev/null; then
+  
+  pushd /etc/yum.repos.d
+    wget https://copr.fedoraproject.org/coprs/sgallagh/cockpit-preview/repo/fedora-21/sgallagh-cockpit-preview-fedora-21.repo
+    yum install -y cockpit cockpit-kubernetes  
+  popd
+
+  systemctl enable cockpit.socket
+  systemctl start cockpit.socket
+fi
+
 # we will run provision to update code each time we test, so we do not want to do salt installs each time
 if ! which salt-master &>/dev/null; then
 
@@ -295,6 +317,28 @@ if ! which salt-minion >/dev/null 2>&1; then
 
   # Install Salt minion
   curl -sS -L --connect-timeout 20 --retry 6 --retry-delay 10 https://bootstrap.saltstack.com | sh -s
+
+  # Edit the Salt minion unit file to do restart always
+  # needed because vagrant uses this as basis for registration of nodes in cloud provider
+  # set a oom_score_adj to -999 to prevent our node from being killed with salt-master and then making kubelet NotReady
+  # because its not found in salt cloud provider call
+  cat <<EOF >/usr/lib/systemd/system/salt-minion.service 
+[Unit]
+Description=The Salt Minion
+After=syslog.target network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/salt-minion
+Restart=Always
+OOMScoreAdjust=-999
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  systemctl daemon-reload
+  systemctl restart salt-minion.service
 
 else
   # Only run highstate when updating the config.  In the first-run case, Salt is

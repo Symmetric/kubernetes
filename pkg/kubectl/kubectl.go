@@ -18,7 +18,6 @@ limitations under the License.
 package kubectl
 
 import (
-	"fmt"
 	"strings"
 
 	"k8s.io/kubernetes/pkg/api"
@@ -80,10 +79,6 @@ type ShortcutExpander struct {
 func (e ShortcutExpander) VersionAndKindForResource(resource string) (defaultVersion, kind string, err error) {
 	resource = expandResourceShortcut(resource)
 	defaultVersion, kind, err = e.RESTMapper.VersionAndKindForResource(resource)
-	// TODO: remove this once v1beta1 and v1beta2 are deprecated
-	if err == nil && kind == "Minion" {
-		err = fmt.Errorf("Alias minion(s) is deprecated. Use node(s) instead")
-	}
 	return defaultVersion, kind, err
 }
 
@@ -96,6 +91,7 @@ func expandResourceShortcut(resource string) string {
 		"cs":     "componentstatuses",
 		"ev":     "events",
 		"ep":     "endpoints",
+		"hpa":    "horizontalpodautoscalers",
 		"limits": "limitranges",
 		"no":     "nodes",
 		"ns":     "namespaces",
@@ -104,7 +100,9 @@ func expandResourceShortcut(resource string) string {
 		"pvc":    "persistentvolumeclaims",
 		"quota":  "resourcequotas",
 		"rc":     "replicationcontrollers",
+		"ds":     "daemonsets",
 		"svc":    "services",
+		"ing":    "ingresses",
 	}
 	if expanded, ok := shortForms[resource]; ok {
 		return expanded

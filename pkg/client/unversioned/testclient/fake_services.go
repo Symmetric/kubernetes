@@ -18,6 +18,7 @@ package testclient
 
 import (
 	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/client/unversioned"
 	"k8s.io/kubernetes/pkg/fields"
 	"k8s.io/kubernetes/pkg/labels"
 	"k8s.io/kubernetes/pkg/watch"
@@ -72,6 +73,9 @@ func (c *FakeServices) Delete(name string) error {
 }
 
 func (c *FakeServices) Watch(label labels.Selector, field fields.Selector, resourceVersion string) (watch.Interface, error) {
-	c.Fake.Invokes(NewWatchAction("services", c.Namespace, label, field, resourceVersion), nil)
-	return c.Fake.Watch, nil
+	return c.Fake.InvokesWatch(NewWatchAction("services", c.Namespace, label, field, resourceVersion))
+}
+
+func (c *FakeServices) ProxyGet(name, path string, params map[string]string) unversioned.ResponseWrapper {
+	return c.Fake.InvokesProxy(NewProxyGetAction("services", c.Namespace, name, path, params))
 }
