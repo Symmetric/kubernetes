@@ -74,8 +74,8 @@ We'll use the `kubelet` to bootstrap the Kubernetes master processes as containe
 1.) Download and install the `kubelet` and `kubectl` binaries.
 
 ```
-# Get the Kubernetes Release.
-wget https://github.com/kubernetes/kubernetes/releases/download/v1.1.0/kubernetes.tar.gz
+# Get the Kubernetes 1.1 Release.
+wget https://storage.googleapis.com/kubernetes-release/release/v1.1.1/kubernetes.tar.gz
 
 # Extract the Kubernetes binaries.
 tar -xf kubernetes.tar.gz
