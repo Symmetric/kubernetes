@@ -34,6 +34,9 @@ base:
 {% endif %}
     - logrotate
     - supervisor
+{% if pillar.get('network_provider', '').lower() == 'calico' %}
+    - calico.node
+{% endif %}
 
   'roles:kubernetes-master':
     - match: grain
@@ -67,6 +70,8 @@ base:
 {% endif %}
 {% if pillar.get('network_provider', '').lower() == 'opencontrail' %}
     - opencontrail-networking-master
+{% elif pillar.get('network_provider', '').lower() == 'calico' %}
+    - calico.master
 {% endif %}
 
   'roles:kubernetes-pool-vsphere':
